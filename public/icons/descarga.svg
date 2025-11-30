@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo -->
+  <rect width="512" height="512" rx="120" fill="#1B4734"></rect>
+
+  <!-- Círculo dorado -->
+  <circle cx="256" cy="256" r="158" fill="none" stroke="#C9A24E" stroke-width="18"></circle>
+
+  <!-- Aleta superior refinada -->
+  <path d="M256 128 
+           C 256 128, 298 206, 318 256 
+           C 298 256, 256 256, 256 256 
+           C 256 256, 214 256, 194 256 
+           C 214 206, 256 128, 256 128Z" fill="#C9A24E"></path>
+
+  <!-- Aleta inferior suavizada -->
+  <path d="M256 384 
+           C 256 384, 298 308, 318 256 
+           L 194 256 
+           C 214 308, 256 384, 256 384Z" fill="#C9A24E" opacity="0.45"></path>
+
+  <!-- Círculo interior -->
+  <circle cx="256" cy="256" r="22" fill="#1B4734" stroke="#C9A24E" stroke-width="6"></circle>
+</svg>
