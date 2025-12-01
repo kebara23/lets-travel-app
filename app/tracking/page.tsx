@@ -55,21 +55,20 @@ export default function TrackingPage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPosition({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-          toast({
-            variant: "destructive",
-            title: "Location Error",
-            description: "Unable to get your location. Please enable location services.",
-          });
-        }
-      );
+      (pos) => {
+        setPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+        toast({
+          variant: "destructive",
+          title: "Location Error",
+          description: "Unable to get your location. Please enable location services.",
+        });
+      }
     );
   }, [toast]);
 
