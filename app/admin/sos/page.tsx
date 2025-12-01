@@ -259,7 +259,7 @@ export default function SOSCenterPage() {
       toast({
         variant: "destructive",
         title: "No Phone Number",
-        description: "This user doesn't have a phone number registered.",
+        description: "This user doesn&apos;t have a phone number registered.",
       });
       return;
     }
