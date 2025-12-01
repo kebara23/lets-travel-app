@@ -1,21 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
-// Fix para iconos de Leaflet en Next.js (si no, no se ven los pines)
-// Solo se ejecuta en el cliente
-if (typeof window !== "undefined") {
-  // @ts-ignore
-  delete L.Icon.Default.prototype._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-  });
-}
 
 // Componente auxiliar para recentrar el mapa cuando cambian los puntos
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -41,6 +29,36 @@ type MapProps = {
 
 // Exportamos como "Map" (Named Export) para que coincida con el import dinámico
 export function Map({ markers, center, zoom, className, style }: MapProps) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Estado de montaje: solo se ejecuta una vez cuando el componente se monta en el cliente
+  useEffect(() => {
+    setIsMounted(true);
+
+    // Fix para iconos de Leaflet en Next.js (si no, no se ven los pines)
+    // Solo se ejecuta en el cliente después de montar
+    if (typeof window !== "undefined") {
+      // @ts-ignore
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+      });
+    }
+  }, []);
+
+  // Renderizado condicional: solo renderiza el MapContainer cuando el componente está montado
+  if (!isMounted) {
+    return (
+      <div className={className || "h-full w-full z-0"} style={style || { height: "100%", width: "100%" }}>
+        <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
+          <p className="text-slate-400">Loading Map...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <MapContainer
       center={center}
