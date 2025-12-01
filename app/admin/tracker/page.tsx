@@ -37,9 +37,14 @@ export default function TrackerPage() {
   const supabase = createClient();
   const [trackingData, setTrackingData] = useState<TrackingData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
   
   // Usamos objeto simple para evitar errores de Map()
   const markersRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Carga inicial
   useEffect(() => {
@@ -119,7 +124,7 @@ export default function TrackerPage() {
       </div>
 
       <div className="flex-1 relative">
-        {loading ? (
+        {loading || !isClient ? (
           <Skeleton className="h-full w-full" />
         ) : (
           <Map 
