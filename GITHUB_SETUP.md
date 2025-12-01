@@ -17,8 +17,8 @@
 Si necesitas compartir las variables con tu equipo, crea un archivo `.env.example`:
 ```bash
 # .env.example (este SÍ se puede subir)
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_URL=https://hxavccmdqoghrbqitmpw.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4YXZjY21kcW9naHJicWl0bXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzODYwNzQsImV4cCI6MjA3OTk2MjA3NH0.mqHd94u-AWPUGGwyaCYGYU65gOtFfIPeJ4-Zhz7H3jA
 ```
 
 ## 📋 Pasos para Subir a GitHub
