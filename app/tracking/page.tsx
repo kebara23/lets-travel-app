@@ -50,8 +50,11 @@ export default function TrackingPage() {
 
   // Get initial position
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
         (pos) => {
           setPosition({
             lat: pos.coords.latitude,
@@ -67,7 +70,7 @@ export default function TrackingPage() {
           });
         }
       );
-    }
+    );
   }, [toast]);
 
   // Save position to Supabase
@@ -105,7 +108,7 @@ export default function TrackingPage() {
 
   // Start watching position
   const startTracking = () => {
-    if (!navigator.geolocation) {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
       toast({
         variant: "destructive",
         title: "Not Supported",
@@ -151,7 +154,7 @@ export default function TrackingPage() {
 
   // Stop watching position
   const stopTracking = () => {
-    if (watchIdRef.current !== null) {
+    if (typeof window !== "undefined" && watchIdRef.current !== null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
@@ -175,7 +178,7 @@ export default function TrackingPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) {
+      if (typeof window !== "undefined" && watchIdRef.current !== null && "geolocation" in navigator) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
