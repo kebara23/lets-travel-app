@@ -55,10 +55,10 @@ export default function TrackingPage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      (position) => {
         setPosition({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
         });
       },
       (error) => {
