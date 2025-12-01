@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,7 +54,12 @@ export default function InsiderPage() {
             <Card key={post.id} className="overflow-hidden border-0 shadow-lg group cursor-pointer hover:-translate-y-1 transition-all duration-300">
               <div className="relative h-56 w-full bg-slate-200">
                 {post.image_url ? (
-                  <img src={post.image_url} alt={post.title} className="h-full w-full object-cover" />
+                  <Image
+                    src={post.image_url}
+                    alt={post.title}
+                    fill
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="h-full w-full bg-slate-800 flex items-center justify-center text-slate-600">
                     <span className="text-xs">No Image</span>

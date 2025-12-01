@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -125,10 +126,11 @@ export default function ExplorePostDetailPage() {
           {/* Image */}
           {post.image_url && (
             <div className="relative h-96 w-full overflow-hidden">
-              <img
+              <Image
                 src={post.image_url}
                 alt={post.title}
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
               />
             </div>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -407,10 +408,11 @@ export default function EditExplorePostPage() {
                 {imagePreview ? (
                   <div className="relative">
                     <div className="relative w-full h-64 border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-                      <img
+                      <Image
                         src={imagePreview}
                         alt="Preview"
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                       <Button
                         type="button"
