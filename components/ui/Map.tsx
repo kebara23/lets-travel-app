@@ -2,87 +2,75 @@
 
 import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 
-// Fix for default marker icons in Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
+// Fix para iconos de Leaflet en Next.js (si no, no se ven los pines)
+// Solo se ejecuta en el cliente
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  });
+}
 
-export type MapMarker = {
-  lat: number;
-  lng: number;
-  popupText?: string;
-  icon?: L.Icon | L.DivIcon;
-};
+// Componente auxiliar para recentrar el mapa cuando cambian los puntos
+function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [center, zoom, map]);
+  return null;
+}
 
 type MapProps = {
-  markers: MapMarker[];
-  center?: [number, number];
-  zoom?: number;
+  markers: Array<{
+    lat: number;
+    lng: number;
+    popupText: string;
+    icon?: L.DivIcon | L.Icon; // Aceptamos iconos personalizados
+  }>;
+  center: [number, number];
+  zoom: number;
   className?: string;
   style?: React.CSSProperties;
 };
 
-// Component to update map center when center prop changes
-function MapCenterUpdater({ center, zoom }: { center: [number, number]; zoom?: number }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (center) {
-      map.setView(center, zoom || map.getZoom());
-    }
-  }, [center, zoom, map]);
-  
-  return null;
-}
-
-// Default custom marker icon
-function createDefaultIcon() {
-  return L.divIcon({
-    className: "custom-marker",
-    html: '<div style="font-size: 32px;">📍</div>',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  });
-}
-
-export function Map({ markers, center, zoom = 13, className = "", style }: MapProps) {
-  // Calculate center from markers if not provided
-  const mapCenter: [number, number] = center || (markers.length > 0 
-    ? [markers[0].lat, markers[0].lng]
-    : [0, 0]);
-
+// Exportamos como "Map" (Named Export) para que coincida con el import dinámico
+export function Map({ markers, center, zoom, className, style }: MapProps) {
   return (
-    <div className={`w-full h-full ${className}`} style={style}>
-      <MapContainer
-        center={mapCenter}
-        zoom={zoom}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom={true}
-        className="rounded-lg"
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        {center && <MapCenterUpdater center={center} zoom={zoom} />}
-        {markers.map((marker, index) => (
-          <Marker
-            key={index}
-            position={[marker.lat, marker.lng]}
-            icon={marker.icon || createDefaultIcon()}
-          >
-            {marker.popupText && <Popup>{marker.popupText}</Popup>}
-          </Marker>
-        ))}
-      </MapContainer>
-    </div>
+    <MapContainer
+      center={center}
+      zoom={zoom}
+      scrollWheelZoom={true}
+      className={className || "h-full w-full z-0"}
+      style={style || { height: "100%", width: "100%" }}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      
+      <MapUpdater center={center} zoom={zoom} />
+
+      {markers.map((marker, idx) => (
+        <Marker 
+          key={idx} 
+          position={[marker.lat, marker.lng]}
+          icon={marker.icon} // Si es undefined, usa el default
+        >
+          <Popup>
+            <div className="font-sans text-sm font-medium">
+              {marker.popupText.split('\n').map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
   );
 }
-
