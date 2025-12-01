@@ -428,7 +428,7 @@ export default function SOSCenterPage() {
                           No Location Data
                         </h3>
                         <p className="text-slate-600 font-body">
-                          This alert doesn't have location coordinates.
+                          This alert doesn&apos;t have location coordinates.
                         </p>
                       </CardContent>
                     </Card>

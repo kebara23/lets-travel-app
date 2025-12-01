@@ -144,7 +144,7 @@ export default function DocumentsPage() {
               No Active Trips
             </h3>
             <p className="text-slate-600 font-body">
-              You don't have any active trips. Documents will appear here once your trip is published.
+              You don&apos;t have any active trips. Documents will appear here once your trip is published.
             </p>
           </CardContent>
         </Card>

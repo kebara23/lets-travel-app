@@ -3,217 +3,87 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Users, MapPin } from "lucide-react";
-import L from "leaflet";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Dynamically import Map component with SSR disabled
+// --- CORRECCIÓN CRÍTICA ---
+// Importamos el mapa de forma dinámica y desactivamos SSR (Server Side Rendering)
 const Map = dynamic(
   () => import("@/components/ui/Map").then((mod) => ({ default: mod.Map })),
   { 
     ssr: false,
     loading: () => (
-      <div className="w-full h-full flex items-center justify-center bg-muted rounded-lg">
-        <Skeleton className="w-full h-full" />
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg animate-pulse">
+        <p className="text-slate-400">Loading Map...</p>
       </div>
     ),
   }
 );
+// ---------------------------
 
+// Tipos simples para evitar errores
 type TrackingData = {
   id: string;
   user_id: string;
   lat: number;
   lng: number;
   updated_at: string;
-  users?: {
-    full_name: string;
-    email: string;
-  };
-};
-
-type MapMarker = {
-  lat: number;
-  lng: number;
-  popupText: string;
-  userId: string;
-  icon?: L.Icon | L.DivIcon;
+  users?: any;
 };
 
 export default function TrackerPage() {
-  const { toast } = useToast();
   const supabase = createClient();
   const [trackingData, setTrackingData] = useState<TrackingData[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Use plain object instead of Map
-  const markersRef = useRef<Record<string, MapMarker>>({});
+  // Usamos objeto simple para evitar errores de Map()
+  const markersRef = useRef<Record<string, any>>({});
 
-  // Create custom icon for each user
-  function createUserIcon(userName: string): L.DivIcon {
-    const colors = [
-      "#3B82F6", // blue
-      "#10B981", // green
-      "#F59E0B", // orange
-      "#EF4444", // red
-      "#8B5CF6", // purple
-      "#EC4899", // pink
-    ];
-    const colorIndex = userName.charCodeAt(0) % colors.length;
-    const color = colors[colorIndex];
-
-    return L.divIcon({
-      className: "custom-user-marker",
-      html: `
-        <div style="
-          background-color: ${color};
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 14px;
-        ">
-          ${userName.charAt(0).toUpperCase()}
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32],
-    });
-  }
-
-  // Convert tracking data to markers array
-  function trackingDataToMarkers(data: TrackingData[]): MapMarker[] {
-    return data.map((item) => {
-      const userName = item.users?.full_name || "Unknown User";
-      const userId = item.user_id;
-      
-      // Check if marker exists in ref using plain object access
-      let icon: L.DivIcon;
-      if (markersRef.current[userId]) {
-        // Reuse existing icon if available
-        icon = markersRef.current[userId].icon || createUserIcon(userName);
-      } else {
-        // Create new icon
-        icon = createUserIcon(userName);
-      }
-      
-      const marker: MapMarker = {
-        lat: item.lat,
-        lng: item.lng,
-        popupText: `${userName}${item.users?.email ? `\n${item.users.email}` : ""}`,
-        userId: userId,
-        icon,
-      };
-
-      // Store in ref using plain object assignment
-      markersRef.current[userId] = marker;
-      
-      return marker;
-    });
-  }
-
-  // Fetch initial tracking data
-  async function fetchTrackingData() {
-    try {
-      const { data, error } = await supabase
-        .from("device_tracking")
-        .select(`
-          id,
-          user_id,
-          lat,
-          lng,
-          updated_at,
-          users:user_id (
-            full_name,
-            email
-          )
-        `);
-
-      if (error) throw error;
-
-      // Transform the data structure (users might be an array)
-      const transformedData = (data || []).map((item) => ({
-        ...item,
-        users: Array.isArray(item.users) ? item.users[0] : item.users,
-      })) as TrackingData[];
-
-      setTrackingData(transformedData);
-    } catch (error: any) {
-      console.error("Error fetching tracking data:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to load tracking data.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Initial fetch
+  // Carga inicial
   useEffect(() => {
-    fetchTrackingData();
+    async function fetchData() {
+      try {
+        const { data } = await supabase
+          .from("device_tracking")
+          .select(`*, users(full_name, email)`);
+        
+        if (data) setTrackingData(data as any);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
   }, []);
 
-  // Realtime subscription
+  // Realtime
   useEffect(() => {
     const channel = supabase
-      .channel("tracking_updates")
+      .channel("tracker-live")
       .on(
         "postgres_changes",
-        {
-          event: "*", // Listen to INSERT, UPDATE, DELETE
-          schema: "public",
-          table: "device_tracking",
-        },
+        { event: "*", schema: "public", table: "device_tracking" },
         async (payload) => {
-          console.log("Tracking update:", payload);
-
           if (payload.eventType === "DELETE") {
-            // Remove from state
-            setTrackingData((prev) => prev.filter((item) => item.id !== payload.old.id));
-            // Delete from ref using plain object delete
-            if (payload.old?.user_id) {
-              delete markersRef.current[payload.old.user_id];
-            }
+            setTrackingData((prev) => prev.filter((i) => i.id !== payload.old.id));
             return;
           }
-
-          // For INSERT or UPDATE, fetch user data and update state
-          const userId = payload.new.user_id;
-          
-          // Fetch user data
-          const { data: userData } = await supabase
-            .from("users")
-            .select("full_name, email")
-            .eq("id", userId)
+          // Si es insert/update, recargamos el dato completo para tener el nombre del usuario
+          const { data } = await supabase
+            .from("device_tracking")
+            .select(`*, users(full_name, email)`)
+            .eq('id', payload.new.id)
             .single();
-
-          const updatedItem: TrackingData = {
-            id: payload.new.id,
-            user_id: userId,
-            lat: payload.new.lat,
-            lng: payload.new.lng,
-            updated_at: payload.new.updated_at,
-            users: userData || undefined,
-          };
-
-          if (payload.eventType === "INSERT") {
-            setTrackingData((prev) => [...prev, updatedItem]);
-          } else if (payload.eventType === "UPDATE") {
-            setTrackingData((prev) =>
-              prev.map((item) => (item.user_id === userId ? updatedItem : item))
-            );
+            
+          if (data) {
+            setTrackingData((prev) => {
+              // Eliminar si ya existe y agregar el nuevo
+              const filtered = prev.filter((i) => i.user_id !== data.user_id);
+              return [...filtered, data as any];
+            });
           }
         }
       )
@@ -222,70 +92,40 @@ export default function TrackerPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, []);
 
-  // Convert tracking data to markers array for rendering
-  const markers = trackingDataToMarkers(trackingData);
+  // Preparar marcadores
+  const markers = trackingData.map(item => ({
+    lat: item.lat,
+    lng: item.lng,
+    popupText: item.users?.full_name || "Unknown",
+    userId: item.user_id
+  }));
 
-  // Calculate center from all markers
-  const mapCenter: [number, number] | undefined = markers.length > 0
-    ? [
-        markers.reduce((sum, m) => sum + m.lat, 0) / markers.length,
-        markers.reduce((sum, m) => sum + m.lng, 0) / markers.length,
-      ]
-    : undefined;
-
-  if (loading) {
-    return (
-      <div className="h-screen w-full p-4 lg:p-8">
-        <Skeleton className="h-full w-full" />
-      </div>
-    );
-  }
+  const defaultCenter: [number, number] = [9.7489, -83.7534]; // Costa Rica
+  const mapCenter = markers.length > 0 ? [markers[0].lat, markers[0].lng] as [number, number] : defaultCenter;
 
   return (
-    <div className="h-screen w-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="p-4 lg:p-6 border-b bg-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 font-body">Live Tracker</h1>
-            <p className="text-slate-600 mt-1 font-body">
-              Real-time location tracking of all clients
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Badge variant="outline" className="font-body">
-              <Users className="h-4 w-4 mr-2" />
-              {trackingData.length} {trackingData.length === 1 ? "client" : "clients"}
-            </Badge>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-slate-100">
+      <div className="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm z-10">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Live Tracker</h1>
+          <p className="text-sm text-slate-500">Real-time GPS locations</p>
         </div>
+        <Badge variant="outline">
+          <Users className="w-4 h-4 mr-2" />
+          {markers.length} Online
+        </Badge>
       </div>
 
-      {/* Map - Full Screen */}
       <div className="flex-1 relative">
-        {markers.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center bg-muted">
-            <Card className="bg-white border-slate-200">
-              <CardContent className="py-16 text-center">
-                <MapPin className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-slate-900 mb-2 font-body">
-                  No Active Tracking
-                </h3>
-                <p className="text-slate-600 font-body">
-                  No clients are currently sharing their location.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+        {loading ? (
+          <Skeleton className="h-full w-full" />
         ) : (
-          <Map
-            markers={markers}
-            center={mapCenter}
-            zoom={mapCenter ? 12 : 2}
-            className="rounded-none"
-            style={{ height: "100%", width: "100%" }}
+          <Map 
+            markers={markers} 
+            center={mapCenter} 
+            zoom={markers.length > 0 ? 12 : 7} 
           />
         )}
       </div>

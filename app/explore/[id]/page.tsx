@@ -94,11 +94,11 @@ export default function ExplorePostDetailPage() {
           </Button>
           <Card className="bg-white border-slate-200">
             <CardContent className="py-16 text-center">
-              <h3 className="text-xl font-semibold text-slate-900 mb-2 font-body">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2 font-body">
                 Post Not Found
               </h3>
               <p className="text-slate-600 font-body">
-                The post you're looking for doesn't exist.
+                The post you&apos;re looking for doesn&apos;t exist.
               </p>
             </CardContent>
           </Card>
