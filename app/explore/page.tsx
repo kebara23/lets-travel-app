@@ -1,26 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Lock, Star } from "lucide-react";
 
+type ExplorePost = {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  image_url: string | null;
+  category: string;
+  content: string;
+  visibility?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function InsiderPage() {
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<ExplorePost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
   const supabase = createClient();
 
   useEffect(() => {
     const loadData = async () => {
-      // 1. Obtener usuario para saber quién soy
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      // Verificar autenticación (RLS filtra automáticamente lo que puedo ver)
+      await supabase.auth.getUser();
 
-      // 2. Cargar Experiencias (RLS filtra automáticamente lo que puedo ver)
+      // Cargar Experiencias (RLS filtra automáticamente lo que puedo ver)
       const { data } = await supabase
         .from("explore_posts")
         .select("*")
@@ -30,7 +41,7 @@ export default function InsiderPage() {
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [supabase]);
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-8 max-w-md mx-auto lg:max-w-4xl">
@@ -51,20 +62,22 @@ export default function InsiderPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           {posts.map((post) => (
-            <Card key={post.id} className="overflow-hidden border-0 shadow-lg group cursor-pointer hover:-translate-y-1 transition-all duration-300">
-              <div className="relative h-56 w-full bg-slate-200">
-                {post.image_url ? (
-                  <Image
-                    src={post.image_url}
-                    alt={post.title}
-                    fill
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="h-full w-full bg-slate-800 flex items-center justify-center text-slate-600">
-                    <span className="text-xs">No Image</span>
-                  </div>
-                )}
+            <Link key={post.id} href={`/explore/${post.id}`}>
+              <Card className="overflow-hidden border-0 shadow-lg group cursor-pointer hover:-translate-y-1 transition-all duration-300">
+                <div className="relative h-56 w-full bg-slate-200">
+                  {post.image_url ? (
+                    <Image 
+                      src={post.image_url} 
+                      alt={post.title} 
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-slate-800 flex items-center justify-center text-slate-600">
+                      <span className="text-xs">No Image</span>
+                    </div>
+                  )}
                 
                 {/* Badges Flotantes */}
                 <div className="absolute top-3 left-3 flex flex-col gap-2">
@@ -107,6 +120,7 @@ export default function InsiderPage() {
                 </div>
               </CardContent>
             </Card>
+            </Link>
           ))}
         </div>
       )}

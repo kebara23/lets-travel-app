@@ -36,7 +36,7 @@ export default function TrackerPage() {
   const supabase = createClient();
   const watchIdRef = useRef<number | null>(null);
 
-  // Función para guardar posición
+  // Función para guardar posición (memoizada)
   const upsertLocation = useCallback(async (position: GeolocationPosition) => {
     const { latitude, longitude } = position.coords;
     
@@ -62,6 +62,17 @@ export default function TrackerPage() {
     }
   }, [supabase]);
 
+  // Handler de error de GPS (memoizado)
+  const handleGpsError = useCallback((error: GeolocationPositionError) => {
+    console.error("GPS Error:", error);
+    toast({
+      title: "GPS Error",
+      description: "Please allow location access.",
+      variant: "destructive"
+    });
+    setIsSharing(false);
+  }, [toast]);
+
   // --- LÓGICA DE GEOLOCALIZACIÓN ---
   useEffect(() => {
     if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
@@ -70,15 +81,7 @@ export default function TrackerPage() {
       if (watchIdRef.current === null) {
         watchIdRef.current = navigator.geolocation.watchPosition(
           upsertLocation,
-          (error) => {
-            console.error("GPS Error:", error);
-            toast({
-              title: "GPS Error",
-              description: "Please allow location access.",
-              variant: "destructive"
-            });
-            setIsSharing(false);
-          },
+          handleGpsError,
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       }
@@ -95,7 +98,7 @@ export default function TrackerPage() {
         watchIdRef.current = null;
       }
     };
-  }, [isSharing, upsertLocation, toast]);
+  }, [isSharing, upsertLocation, handleGpsError]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-50">
