@@ -10,17 +10,28 @@ import { DaySelector } from "@/components/features/itinerary/DaySelector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import type { ItineraryItem as HookItineraryItem } from "@/hooks/useItinerary";
 
-type ItineraryItem = {
+// Tipo que coincide con el esquema de la base de datos
+type ItineraryItemDB = {
   id: string;
-  trip_id: string;
-  day: number;
-  day_date: string;
-  start_time: string; // REQUISITO 1: usar start_time
   title: string;
   description: string | null;
   type: "flight" | "hotel" | "activity" | "food" | "transport";
+  start_time: string;
+  day: number;
+  day_date: string;
   is_completed: boolean;
+  location_data: Record<string, unknown> | null;
+};
+
+type Trip = {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  itinerary_items: ItineraryItemDB[];
 };
 
 export default function ItineraryPage() {
@@ -28,18 +39,18 @@ export default function ItineraryPage() {
   const { toast } = useToast();
   const supabase = createClient();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [tripId, setTripId] = useState<string | null>(null);
-  const [tripIdLoading, setTripIdLoading] = useState(true);
-  const [items, setItems] = useState<ItineraryItem[]>([]);
-  const [itemsLoading, setItemsLoading] = useState(false);
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // REQUISITO 2: Obtener usuario y viaje ACTIVO
+  // Consulta exacta según el esquema de la base de datos
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchActiveTripId() {
+    async function fetchTrip() {
       try {
+        setLoading(true);
+
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!isMounted) return;
@@ -49,12 +60,20 @@ export default function ItineraryPage() {
           return;
         }
 
-        const { data: trip, error: tripError } = await supabase
-          .from("trips")
-          .select("id")
-          .eq("user_id", session.user.id)
-          .eq("status", "active") // REQUISITO 2: status = 'active'
-          .order("created_at", { ascending: false })
+        // REQUISITO: Query exacta con relación anidada
+        const { data: tripData, error: tripError } = await supabase
+          .from('trips')
+          .select(`
+            id, title, start_date, end_date, status,
+            itinerary_items (
+              id, title, description, type, 
+              start_time, day, day_date, 
+              is_completed, location_data
+            )
+          `)
+          .eq('status', 'active')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
@@ -62,103 +81,74 @@ export default function ItineraryPage() {
 
         if (tripError) {
           if (tripError.code === "PGRST116") {
-            console.log("No active trips found for user");
-            setTripId(null);
+            // No active trips found
+            setTrip(null);
           } else {
-            console.error("Error fetching trip ID:", tripError);
+            console.error("Error fetching trip:", tripError);
             toast({
               variant: "destructive",
               title: "Error",
-              description: tripError.message || "Failed to load your trip information.",
+              description: tripError.message || "Failed to load itinerary details.",
             });
-            setTripId(null);
+            setTrip(null);
           }
-        } else if (trip?.id) {
-          setTripId(trip.id);
+        } else if (tripData) {
+          setTrip(tripData as Trip);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         if (isMounted) {
-          console.error("Exception fetching trip ID:", error);
+          const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+          console.error("Exception fetching trip:", error);
+          toast({
+            variant: "destructive",
+            title: "Unexpected Error",
+            description: errorMessage,
+          });
         }
       } finally {
         if (isMounted) {
-          setTripIdLoading(false);
+          setLoading(false);
         }
       }
     }
 
-    fetchActiveTripId();
+    fetchTrip();
 
     return () => {
       isMounted = false;
     };
   }, [supabase, toast, router]);
 
-  // REQUISITO 1: Consulta Exacta
-  useEffect(() => {
-    let isMounted = true;
+  // Mapear items de DB a formato esperado por TimelineItem
+  const mappedItems: HookItineraryItem[] = useMemo(() => {
+    if (!trip?.itinerary_items) return [];
 
-    async function fetchItems() {
-      if (!tripId) return;
-
-      setItemsLoading(true);
-      try {
-        const { data: itemsData, error: itemsError } = await supabase
-          .from("itinerary_items")
-          // REQUISITO 1: Select explícito, sin 'location' ni 'time', usando 'start_time'
-          .select("id, title, description, type, start_time, day, is_completed, day_date")
-          .eq("trip_id", tripId)
-          .order("day", { ascending: true })
-          .order("start_time", { ascending: true }); // Usar start_time para ordenar
-
-        if (!isMounted) return;
-
-        if (itemsError) {
-          // REQUISITO 3: Manejo de Errores Visible
-          console.error("Supabase Error:", itemsError);
-          toast({
-            variant: "destructive",
-            title: "Error fetching items",
-            description: itemsError.message || "Failed to load itinerary details.",
-          });
-        } else {
-          setItems(itemsData || []);
-        }
-      } catch (error: any) {
-        if (isMounted) {
-          console.error("Exception fetching items:", error);
-          toast({
-            variant: "destructive",
-            title: "Unexpected Error",
-            description: error.message || "An unexpected error occurred.",
-          });
-        }
-      } finally {
-        if (isMounted) {
-          setItemsLoading(false);
-        }
-      }
-    }
-
-    if (!tripIdLoading && tripId) {
-      fetchItems();
-    } else if (!tripIdLoading && !tripId) {
-      setItemsLoading(false);
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [tripId, tripIdLoading, supabase, toast]);
-
+    return trip.itinerary_items.map((item) => ({
+      id: item.id,
+      trip_id: trip.id,
+      day: item.day,
+      time: item.start_time, // Mapear start_time a time
+      title: item.title,
+      description: item.description,
+      type: item.type as "flight" | "hotel" | "activity" | "food",
+      location: item.location_data 
+        ? (typeof item.location_data === 'string' 
+            ? item.location_data 
+            : item.location_data.name || item.location_data.address || null)
+        : null,
+      is_completed: item.is_completed,
+      created_at: item.day_date || new Date().toISOString(),
+      updated_at: item.day_date || new Date().toISOString(),
+    }));
+  }, [trip]);
 
   // Extract unique days from items
   const days = useMemo(() => {
-    const uniqueDays = Array.from(new Set(items.map((item) => item.day)))
+    const uniqueDays = Array.from(new Set(mappedItems.map((item) => item.day)))
       .filter((day) => day !== null && day !== undefined)
       .sort((a, b) => a - b);
     return uniqueDays;
-  }, [items]);
+  }, [mappedItems]);
 
   // Auto-select first available day
   useEffect(() => {
@@ -170,34 +160,22 @@ export default function ItineraryPage() {
   // Filter items by selected day
   const filteredItems = useMemo(() => {
     if (selectedDay === null) {
-      return items;
+      return mappedItems;
     }
-    return items.filter((item) => item.day === selectedDay);
-  }, [items, selectedDay]);
+    return mappedItems.filter((item) => item.day === selectedDay);
+  }, [mappedItems, selectedDay]);
 
   // Group items by day for display
   const itemsByDay = useMemo(() => {
-    const grouped: Record<number, ItineraryItem[]> = {};
-    
-    // REQUISITO 4: Renderizado - Muestra hora usando start_time
-    // Mapeo seguro para el renderizado
-    const safeItems = filteredItems.map(item => ({
-      ...item,
-      // Adaptar TimelineItem si espera 'time', o usar start_time directamente
-      // Aquí asumimos que TimelineItem puede necesitar 'time' prop o lo pasamos como start_time
-      // Si TimelineItem espera 'time', lo mapeamos:
-      time: item.start_time || "--:--", 
-      title: item.title || "(Untitled)",
-      type: (item.type || "activity") as ItineraryItem["type"]
-    }));
+    const grouped: Record<number, HookItineraryItem[]> = {};
 
-    safeItems.forEach((item) => {
+    filteredItems.forEach((item) => {
       const day = item.day;
       if (day !== null && day !== undefined) {
         if (!grouped[day]) {
           grouped[day] = [];
         }
-        grouped[day].push(item as any); // Type assertion para compatibilidad con TimelineItem si es estricto
+        grouped[day].push(item);
       }
     });
 
@@ -205,9 +183,12 @@ export default function ItineraryPage() {
       .map(Number)
       .sort((a, b) => a - b);
     
-    const sortedGrouped: Record<number, ItineraryItem[]> = {};
+    const sortedGrouped: Record<number, HookItineraryItem[]> = {};
     sortedDays.forEach((day) => {
-      sortedGrouped[day] = grouped[day];
+      sortedGrouped[day] = grouped[day].sort((a, b) => {
+        // Sort by time within each day
+        return a.time.localeCompare(b.time);
+      });
     });
     
     return sortedGrouped;
@@ -215,9 +196,17 @@ export default function ItineraryPage() {
 
   const handleToggleComplete = async (id: string, is_completed: boolean) => {
     setIsUpdating(true);
-    setItems(prev => prev.map(item => 
-      item.id === id ? { ...item, is_completed } : item
-    ));
+    
+    // Optimistic update
+    setTrip((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        itinerary_items: prev.itinerary_items.map((item) =>
+          item.id === id ? { ...item, is_completed } : item
+        ),
+      };
+    });
 
     try {
       const { error } = await supabase
@@ -226,9 +215,16 @@ export default function ItineraryPage() {
         .eq("id", id);
         
       if (error) {
-        setItems(prev => prev.map(item => 
-          item.id === id ? { ...item, is_completed: !is_completed } : item
-        ));
+        // Revert optimistic update
+        setTrip((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            itinerary_items: prev.itinerary_items.map((item) =>
+              item.id === id ? { ...item, is_completed: !is_completed } : item
+            ),
+          };
+        });
         console.error("Error updating completion status:", error);
         toast({
           variant: "destructive",
@@ -236,17 +232,30 @@ export default function ItineraryPage() {
           description: "Failed to update status: " + error.message,
         });
       }
-    } catch (err: any) {
-       setItems(prev => prev.map(item => 
-        item.id === id ? { ...item, is_completed: !is_completed } : item
-      ));
+    } catch (err: unknown) {
+      // Revert optimistic update
+      setTrip((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          itinerary_items: prev.itinerary_items.map((item) =>
+            item.id === id ? { ...item, is_completed: !is_completed } : item
+          ),
+        };
+      });
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred.";
       console.error("Exception updating completion status:", err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      });
     } finally {
       setIsUpdating(false);
     }
   };
 
-  if (tripIdLoading || (tripId && itemsLoading)) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background p-4 lg:p-8">
         <div className="max-w-4xl mx-auto space-y-6">
@@ -269,7 +278,7 @@ export default function ItineraryPage() {
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="font-heading text-4xl lg:text-5xl text-primary">
-              Your Journey
+              {trip?.title || "Your Journey"}
             </h1>
             <p className="font-body text-muted-foreground">
               Track your travel itinerary day by day
@@ -288,11 +297,11 @@ export default function ItineraryPage() {
         <Separator />
 
         {/* Empty State: No Trips */}
-        {!tripId && !tripIdLoading && (
+        {!trip && !loading && (
           <div className="text-center py-12 space-y-4">
-             <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <Calendar className="h-8 w-8 text-primary" />
-             </div>
+            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <Calendar className="h-8 w-8 text-primary" />
+            </div>
             <h3 className="font-heading text-2xl text-primary">
               No Active Trips
             </h3>
@@ -310,7 +319,7 @@ export default function ItineraryPage() {
         )}
 
         {/* Empty State: Trip exists but no items */}
-        {tripId && !itemsLoading && items.length === 0 && (
+        {trip && !loading && mappedItems.length === 0 && (
           <div className="text-center py-12 space-y-4">
             <p className="font-body text-muted-foreground text-lg">
               Your itinerary has no activities yet.
@@ -341,34 +350,34 @@ export default function ItineraryPage() {
         )}
 
         {/* Timeline */}
-        {items.length > 0 && (
-            <div className="space-y-8">
+        {mappedItems.length > 0 && (
+          <div className="space-y-8">
             {Object.entries(itemsByDay).map(([day, dayItems]) => (
-                <div key={day} className="space-y-4">
+              <div key={day} className="space-y-4">
                 {selectedDay === null && (
-                    <div className="flex items-center gap-3 pb-2">
+                  <div className="flex items-center gap-3 pb-2">
                     <h2 className="font-heading text-2xl text-primary">Day {day}</h2>
                     <Separator className="flex-1" />
-                    </div>
+                  </div>
                 )}
                 <div className="space-y-4">
-                    {dayItems.map((item, index) => (
+                  {dayItems.map((item, index) => (
                     <TimelineItem
-                        key={item.id}
-                        item={item} // TimelineItem should accept the mapped item structure
-                        isLast={index === dayItems.length - 1}
-                        onToggleComplete={handleToggleComplete}
-                        isUpdating={isUpdating}
+                      key={item.id}
+                      item={item}
+                      isLast={index === dayItems.length - 1}
+                      onToggleComplete={handleToggleComplete}
+                      isUpdating={isUpdating}
                     />
-                    ))}
+                  ))}
                 </div>
-                </div>
+              </div>
             ))}
-            </div>
+          </div>
         )}
 
         {/* Empty State: Filtered items empty */}
-        {!itemsLoading && items.length > 0 && filteredItems.length === 0 && selectedDay !== null && (
+        {!loading && mappedItems.length > 0 && filteredItems.length === 0 && selectedDay !== null && (
           <div className="text-center py-12 space-y-4">
             <p className="font-body text-muted-foreground text-lg">
               No activities found for Day {selectedDay}.
