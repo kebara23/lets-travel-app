@@ -30,6 +30,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -70,17 +71,21 @@ export default function LoginPage() {
   // Check if user is already logged in (non-blocking)
   // Use getUser() instead of getSession() to verify the session is actually valid
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      setIsCheckingSession(false);
+      return;
+    }
 
     let isMounted = true;
     const currentSupabase = supabase;
+    let hasRedirected = false; // Prevent multiple redirects
 
     async function checkSession() {
       try {
         // Longer delay to allow signOut to complete if user was just logged out
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        if (!isMounted) return;
+        if (!isMounted || hasRedirected) return;
         
         // Use getUser() instead of getSession() to verify the session is actually valid
         // getSession() can return a cached session that's no longer valid
@@ -90,18 +95,24 @@ export default function LoginPage() {
         } = await currentSupabase.auth.getUser();
 
         // Only redirect if we have a valid user (no error) and the component is still mounted
-        if (isMounted && user && !userError) {
+        if (isMounted && !hasRedirected && user && !userError) {
           console.log("✅ Valid session found, redirecting to dashboard");
+          hasRedirected = true;
+          setIsCheckingSession(false);
           // User is already logged in, redirect to dashboard
           router.push("/dashboard");
-        } else if (userError) {
-          console.log("ℹ️ No valid session found, showing login form");
-          // No valid session, show login form (this is the expected state)
+        } else {
+          if (isMounted) {
+            console.log("ℹ️ No valid session found, showing login form");
+            setIsCheckingSession(false);
+            // No valid session, show login form (this is the expected state)
+          }
         }
       } catch (error) {
         // If there's an error checking session, just show the login form
-        if (isMounted) {
+        if (isMounted && !hasRedirected) {
           console.error("Error checking session:", error);
+          setIsCheckingSession(false);
         }
       }
     }
@@ -359,6 +370,18 @@ export default function LoginPage() {
       });
       setIsLoading(false);
     }
+  }
+
+  // Show loading state while checking session to prevent flashing
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground font-body">Verificando sesión...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
