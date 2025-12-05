@@ -1,6 +1,5 @@
 "use client";
 
-import L from "leaflet";
 import { ActiveUser } from "@/hooks/useActiveUserLocations";
 
 // Check if user is stale (last updated > 1 hour ago)
@@ -13,7 +12,16 @@ export function isStale(lastUpdated: string): boolean {
 }
 
 // Create custom marker icon with avatar
-export function createAvatarMarker(user: ActiveUser): L.DivIcon {
+export function createAvatarMarker(user: ActiveUser): any {
+  // Ensure we're on the client side - this should never be called during SSR
+  if (typeof window === "undefined") {
+    // Fallback for SSR (shouldn't happen with proper guards)
+    return null;
+  }
+
+  // Import Leaflet dynamically only on client side
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const L = require("leaflet") as typeof import("leaflet");
   const stale = isStale(user.lastUpdated);
   const opacity = stale ? 0.5 : 1;
   const grayscale = stale ? "grayscale(100%)" : "none";

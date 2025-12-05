@@ -18,6 +18,12 @@ export function useActiveUserLocations() {
   const supabase = createClient();
 
   useEffect(() => {
+    // Only fetch on client side
+    if (typeof window === "undefined") {
+      setLoading(false);
+      return;
+    }
+
     fetchActiveUsers();
 
     // Set up realtime subscription
@@ -41,8 +47,10 @@ export function useActiveUserLocations() {
     const interval = setInterval(fetchActiveUsers, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
+      if (typeof window !== "undefined") {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      }
     };
   }, []);
 

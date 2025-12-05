@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useActiveUserLocations } from "@/hooks/useActiveUserLocations";
 import { createAvatarMarker, isStale } from "@/components/ui/AvatarMarker";
@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Users, MapPin, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import L from "leaflet";
 
 // Carga dinámica del mapa para evitar error de servidor
 const Map = dynamic(
@@ -58,11 +57,45 @@ function formatTimeAgo(dateString: string): string {
 }
 
 export default function AdminTrackerPage() {
-  const { activeUsers, loading, error, refetch } = useActiveUserLocations();
   const { toast } = useToast();
+  const [isClient, setIsClient] = useState(false);
+  
+  // Only fetch data on client side
+  const { activeUsers, loading, error, refetch } = useActiveUserLocations();
+
+  // Ensure we're on the client before using Leaflet or any browser APIs
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsClient(true);
+    }
+  }, []);
+
+  // Early return during SSR
+  if (!isClient) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-slate-50">
+        <div className="p-6 bg-white border-b shadow-sm z-10">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 font-body">Live Tracker</h1>
+              <p className="text-sm text-slate-500 font-body">Monitor active client locations in real-time</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 relative bg-slate-200">
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-8">
+            <Loader2 className="w-12 h-12 mb-4 animate-spin opacity-50" />
+            <p className="font-body">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Inject custom marker styles
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    
     const style = document.createElement("style");
     style.textContent = `
       .custom-avatar-marker {
@@ -72,15 +105,27 @@ export default function AdminTrackerPage() {
     `;
     document.head.appendChild(style);
     return () => {
-      document.head.removeChild(style);
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
     };
   }, []);
 
-  // Transform active users to map markers
+  // Transform active users to map markers (only on client)
   const markers = useMemo(() => {
-    return activeUsers.map((user) => {
-      const stale = isStale(user.lastUpdated);
-      const icon = createAvatarMarker(user);
+    if (!isClient || typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      return activeUsers.map((user) => {
+        const stale = isStale(user.lastUpdated);
+        const icon = createAvatarMarker(user);
+        
+        if (!icon) {
+          // Skip if icon creation failed (SSR guard)
+          return null;
+        }
       
       const popupContent = `
         <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 200px;">
@@ -98,14 +143,18 @@ export default function AdminTrackerPage() {
         </div>
       `;
 
-      return {
-        lat: user.lat,
-        lng: user.lng,
-        popupText: popupContent,
-        icon,
-      };
-    });
-  }, [activeUsers]);
+        return {
+          lat: user.lat,
+          lng: user.lng,
+          popupText: popupContent,
+          icon,
+        };
+      }).filter((marker): marker is NonNullable<typeof marker> => marker !== null);
+    } catch (error) {
+      console.error("Error creating markers:", error);
+      return [];
+    }
+  }, [activeUsers, isClient]);
 
   // Calculate map center
   const center = useMemo(() => calculateCenter(activeUsers), [activeUsers]);
@@ -180,13 +229,18 @@ export default function AdminTrackerPage() {
             <p className="font-body text-lg font-semibold mb-2">No Active Locations</p>
             <p className="font-body text-sm">No clients are currently sharing their location.</p>
           </div>
-        ) : (
+        ) : isClient ? (
           <Map 
             markers={markers} 
             center={center} 
             zoom={zoom}
             className="w-full h-full"
           />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-8">
+            <Loader2 className="w-12 h-12 mb-4 animate-spin opacity-50" />
+            <p className="font-body">Initializing map...</p>
+          </div>
         )}
       </div>
     </div>
