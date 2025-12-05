@@ -362,54 +362,61 @@ export default function SOSCenterPage() {
                 const isPending = alert.status === "pending";
                 const isSelected = selectedAlert?.id === alert.id;
                 
-                const handleCardClick = (e: React.MouseEvent | React.TouchEvent) => {
+                const handleCardClick = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  
+                  console.log("🖱️ Card clicked:", alert.id, alert.users?.full_name);
                   
                   // Update selected alert (works for both mobile and desktop)
                   setSelectedAlert(alert);
                   
-                  // On mobile, scroll to details section if it exists
-                  // The layout will handle showing details responsively
+                  console.log("✅ Selected alert updated:", alert.id);
                 };
                 
                 return (
-                  <div
+                  <Card
                     key={alert.id}
                     onClick={handleCardClick}
                     onTouchStart={(e) => {
                       // Visual feedback on touch start
-                      const target = e.currentTarget;
-                      target.classList.add("active:scale-[0.98]");
+                      e.currentTarget.classList.add("scale-[0.98]");
+                    }}
+                    onTouchEnd={(e) => {
+                      // Remove visual feedback
+                      e.currentTarget.classList.remove("scale-[0.98]");
                     }}
                     className={cn(
                       "cursor-pointer transition-all select-none",
                       "active:scale-[0.98] active:bg-red-50/70",
                       "touch-manipulation", // Optimize touch handling
-                      isSelected && "ring-2 ring-primary ring-offset-2"
+                      isSelected && "ring-2 ring-primary ring-offset-2",
+                      "transition-all border-2",
+                      isSelected
+                        ? "border-primary shadow-lg bg-primary/5"
+                        : isPending
+                        ? "border-red-500 bg-red-50/50 hover:bg-red-50/70"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                     )}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        handleCardClick(e);
+                        handleCardClick(e as any);
                       }
                     }}
                     aria-label={`View SOS alert from ${alert.users?.full_name || "Unknown User"}`}
                   >
-                    <Card
-                      className={cn(
-                        "transition-all border-2",
-                        isSelected
-                          ? "border-primary shadow-lg bg-primary/5"
-                          : isPending
-                          ? "border-red-500 bg-red-50/50 hover:bg-red-50/70"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
-                      )}
-                    >
-                      <CardContent className="p-4 relative">
-                        <div className="space-y-2">
+                      <CardContent 
+                        className="p-4 relative"
+                        onClick={(e) => {
+                          // Ensure click propagates to parent Card
+                          e.stopPropagation();
+                          handleCardClick(e as any);
+                        }}
+                      >
+                        <div className="space-y-2 pointer-events-none">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0 pr-2">
                               <h3 className="font-semibold text-slate-900 font-body truncate">
@@ -422,8 +429,7 @@ export default function SOSCenterPage() {
                             </div>
                             <Badge
                               variant={getStatusBadge(alert.status)}
-                              className="font-body text-xs flex-shrink-0 pointer-events-none relative z-0"
-                              onClick={(e) => e.stopPropagation()}
+                              className="font-body text-xs flex-shrink-0"
                             >
                               {alert.status}
                             </Badge>
@@ -438,8 +444,7 @@ export default function SOSCenterPage() {
                           )}
                         </div>
                       </CardContent>
-                    </Card>
-                  </div>
+                  </Card>
                 );
               })
             )}
