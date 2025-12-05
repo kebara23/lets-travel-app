@@ -17,6 +17,7 @@ import { Map, FileText, Key, MessageSquare, LogOut, MapPin, Clock } from "lucide
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
+import { ReviewDialog } from "@/components/features/reviews/ReviewDialog";
 
 // Simple countdown component for Next Activity
 function NextActivityCountdown({ targetDate }: { targetDate: Date }) {
@@ -716,6 +717,12 @@ export default function DashboardPage() {
               </Link>
             );
           })}
+          
+          {/* Review & Reputation Module */}
+          <ReviewDialog 
+            className="block h-full animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both"
+            style={{ animationDelay: "500ms" }}
+          />
         </div>
       </div>
     </div>
