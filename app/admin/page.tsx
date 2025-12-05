@@ -162,9 +162,22 @@ export default function AdminDashboard() {
     try {
       console.log("📊 Fetching recent activity...");
       
+      // Explicitly select all fields including new metadata fields
       const { data, error } = await supabase
         .from("notifications")
-        .select("*")
+        .select(`
+          id,
+          type,
+          title,
+          message,
+          created_at,
+          entity_type,
+          entity_id,
+          actor_name,
+          target_user_name,
+          resource_id,
+          resource_type
+        `)
         .order("created_at", { ascending: false })
         .limit(5);
 
@@ -187,7 +200,19 @@ export default function AdminDashboard() {
         return;
       }
 
+      // Debug: Log the actual data structure
       console.log("✅ Recent activity loaded:", data.length, "items");
+      console.log("📋 Sample activity data:", data[0] ? {
+        id: data[0].id,
+        type: data[0].type,
+        actor_name: data[0].actor_name,
+        target_user_name: data[0].target_user_name,
+        resource_id: data[0].resource_id,
+        resource_type: data[0].resource_type,
+        entity_type: data[0].entity_type,
+        entity_id: data[0].entity_id,
+      } : "No data");
+      
       setRecentActivity(data);
     } catch (error: any) {
       console.error("💥 ERROR DASHBOARD (Exception in fetchRecentActivity):", error);
@@ -491,8 +516,8 @@ export default function AdminDashboard() {
                 const linkUrl = getRedirectPath(activity);
                 const isClickable = linkUrl !== "#";
 
-                // Build rich text display
-                const actorName = activity.actor_name || "Admin";
+                // Build rich text display with proper fallbacks
+                const actorName = activity.actor_name || activity.title?.split(" ")[0] || "Admin";
                 const targetName = activity.target_user_name || "Cliente";
                 const resourceLabel = (() => {
                   const rt = activity.resource_type?.toUpperCase();
@@ -509,17 +534,71 @@ export default function AdminDashboard() {
                   return "Item";
                 })();
 
+                // Debug: Log activity data for each item
+                console.log("🔍 Rendering activity item:", {
+                  id: activity.id,
+                  type: activity.type,
+                  resource_type: activity.resource_type,
+                  resource_id: activity.resource_id,
+                  entity_type: activity.entity_type,
+                  entity_id: activity.entity_id,
+                  actor_name: activity.actor_name,
+                  target_user_name: activity.target_user_name,
+                  linkUrl,
+                  isClickable
+                });
+
                 return (
                   <button
                     key={activity.id}
                     type="button"
                     onClick={(e) => {
-                      if (isClickable) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log("Clicked item:", activity.type, activity.id, "->", linkUrl);
-                        router.push(linkUrl);
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // CRITICAL DEBUG: Log everything about the click
+                      console.log("🖱️ Clicking activity:", {
+                        activityId: activity.id,
+                        activityType: activity.type,
+                        resourceType: activity.resource_type,
+                        resourceId: activity.resource_id,
+                        entityType: activity.entity_type,
+                        entityId: activity.entity_id,
+                        linkUrl,
+                        isClickable
+                      });
+
+                      // Handle redirection with switch statement
+                      if (!isClickable || linkUrl === "#") {
+                        // Check if we have resource_id but linkUrl is still "#"
+                        if (activity.resource_id) {
+                          console.log("⚠️ Have resource_id but linkUrl is #, attempting manual routing");
+                          const resourceType = (activity.resource_type || activity.entity_type || activity.type || "").toUpperCase();
+                          
+                          let manualPath = "#";
+                          if (resourceType.includes("TRIP")) {
+                            manualPath = `/admin/trips/${activity.resource_id}`;
+                          } else if (resourceType.includes("CLIENT")) {
+                            manualPath = `/admin/clients/${activity.resource_id}`;
+                          } else if (resourceType.includes("SOS")) {
+                            manualPath = `/admin/sos/${activity.resource_id}`;
+                          } else if (resourceType.includes("MESSAGE")) {
+                            manualPath = `/admin/messages?chatId=${activity.resource_id}`;
+                          }
+                          
+                          if (manualPath !== "#") {
+                            console.log("✅ Using manual path:", manualPath);
+                            router.push(manualPath);
+                            return;
+                          }
+                        }
+                        
+                        alert(`Error: No Resource ID found for this activity.\n\nActivity ID: ${activity.id}\nType: ${activity.type || activity.resource_type || "Unknown"}\nResource ID: ${activity.resource_id || activity.entity_id || "Missing"}`);
+                        return;
                       }
+
+                      console.log("✅ Navigating to:", linkUrl);
+                      router.push(linkUrl);
                     }}
                     disabled={!isClickable}
                     className={cn(
@@ -530,8 +609,9 @@ export default function AdminDashboard() {
                       "transition-colors",
                       "min-h-[48px]",
                       "relative z-10",
+                      "touch-manipulation", // Mobile optimization
                       isClickable
-                        ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 group"
+                        ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 group"
                         : "cursor-default opacity-60"
                     )}
                     aria-label={`${actorName} actualizó ${resourceLabel} para ${targetName}`}
