@@ -87,7 +87,6 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [allTrips, setAllTrips] = useState<Trip[]>([]); // Store all active trips
   const [tripLoading, setTripLoading] = useState(true);
   const [nextActivity, setNextActivity] = useState<ItineraryItem | null>(null);
   const [nextActivityDate, setNextActivityDate] = useState<Date | null>(null);
