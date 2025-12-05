@@ -11,7 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Search, User as UserIcon, Loader2, MessageSquare } from "lucide-react";
+import { Send, Search, User as UserIcon, Loader2, MessageSquare, Mail, MailOpen, MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 type UserProfile = {
   id: string;
@@ -27,6 +34,21 @@ type Message = {
   recipient_id: string | null;
   is_read: boolean;
   created_at: string;
+  sender?: {
+    full_name: string | null;
+    email: string;
+  };
+};
+
+type MessageListItem = {
+  id: string;
+  content: string;
+  sender_id: string;
+  recipient_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  sender_name: string;
+  sender_email: string;
 };
 
 export default function AdminMessagesPage() {
@@ -40,12 +62,15 @@ export default function AdminMessagesPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messageList, setMessageList] = useState<MessageListItem[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingMessageList, setLoadingMessageList] = useState(true);
   const [sending, setSending] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "chat">("list");
 
-  // 1. Auth & Load Clients
+  // 1. Auth & Load Clients & Message List
   useEffect(() => {
     let isMounted = true;
 
@@ -61,7 +86,7 @@ export default function AdminMessagesPage() {
       // Fetch Clients
       try {
         const { data, error } = await supabase
-          .from("users") // Assuming a table mirroring auth.users or profiles exists
+          .from("users")
           .select("id, email, full_name, role")
           .eq("role", "client")
           .order("full_name", { ascending: true });
@@ -82,6 +107,11 @@ export default function AdminMessagesPage() {
       } catch (err) {
         console.error("Exception fetching users:", err);
       }
+
+      // Fetch Message List (all messages to admin or general inbox)
+      if (isMounted && session) {
+        fetchMessageList(session.user.id);
+      }
     }
 
     init();
@@ -90,6 +120,107 @@ export default function AdminMessagesPage() {
       isMounted = false;
     };
   }, [supabase, router, toast]);
+
+  // Fetch all messages for the inbox list
+  async function fetchMessageList(adminId: string) {
+    try {
+      setLoadingMessageList(true);
+      const { data, error } = await supabase
+        .from("messages")
+        .select(`
+          id,
+          content,
+          sender_id,
+          recipient_id,
+          is_read,
+          created_at,
+          sender:users!sender_id (
+            full_name,
+            email
+          )
+        `)
+        .or(`recipient_id.is.null,recipient_id.eq.${adminId}`)
+        .neq("sender_id", adminId) // Exclude messages sent by admin
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+
+      // Transform data for list view
+      const transformedMessages = (data || []).map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        sender_id: msg.sender_id,
+        recipient_id: msg.recipient_id,
+        is_read: msg.is_read,
+        created_at: msg.created_at,
+        sender_name: msg.sender?.full_name || "Unknown",
+        sender_email: msg.sender?.email || "",
+      }));
+
+      // Sort: unread first, then by date
+      const sorted = transformedMessages.sort((a, b) => {
+        if (a.is_read !== b.is_read) {
+          return a.is_read ? 1 : -1; // Unread first
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setMessageList(sorted);
+    } catch (error: any) {
+      console.error("Error fetching message list:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load messages.",
+      });
+    } finally {
+      setLoadingMessageList(false);
+    }
+  }
+
+  // Toggle read/unread status
+  async function toggleReadStatus(messageId: string, currentStatus: boolean) {
+    try {
+      const { error } = await supabase
+        .from("messages")
+        .update({ is_read: !currentStatus })
+        .eq("id", messageId);
+
+      if (error) throw error;
+
+      // Update local state
+      setMessageList((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, is_read: !currentStatus } : msg
+        )
+      );
+
+      // Also update chat messages if open
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, is_read: !currentStatus } : msg
+        )
+      );
+
+      toast({
+        title: currentStatus ? "Marked as Unread" : "Marked as Read",
+        description: "Message status updated.",
+      });
+
+      // Re-fetch to maintain sort order
+      if (adminId) {
+        fetchMessageList(adminId);
+      }
+    } catch (error: any) {
+      console.error("Error toggling read status:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update message status.",
+      });
+    }
+  }
 
   // 1.5. Auto-select chat from URL parameter
   useEffect(() => {
@@ -174,6 +305,18 @@ export default function AdminMessagesPage() {
                     : msg
                 )
               );
+              // Also update message list
+              setMessageList((prev) =>
+                prev.map((msg) =>
+                  unreadMessageIds.includes(msg.id)
+                    ? { ...msg, is_read: true }
+                    : msg
+                )
+              );
+              // Re-fetch to maintain sort order
+              if (adminId) {
+                fetchMessageList(adminId);
+              }
             }
           }
         }
@@ -225,6 +368,16 @@ export default function AdminMessagesPage() {
                     msg.id === newMsg.id ? { ...msg, is_read: true } : msg
                   )
                 );
+                // Also update message list
+                setMessageList((prev) =>
+                  prev.map((msg) =>
+                    msg.id === newMsg.id ? { ...msg, is_read: true } : msg
+                  )
+                );
+                // Re-fetch to maintain sort order
+                if (adminId) {
+                  fetchMessageList(adminId);
+                }
               }
             }
           }
@@ -287,61 +440,130 @@ export default function AdminMessagesPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] w-full bg-slate-50">
-      {/* Sidebar: User List */}
+      {/* Sidebar: Message List */}
       <div className="w-80 border-r bg-white flex flex-col hidden md:flex">
         <div className="p-4 border-b">
           <h2 className="font-heading text-lg font-semibold text-slate-800 mb-4">Inbox</h2>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search clients..."
+              placeholder="Search messages..."
               className="pl-9 bg-slate-50 border-slate-200"
             />
           </div>
         </div>
         
         <ScrollArea className="flex-1">
-          <div className="flex flex-col gap-1 p-2">
-            {loadingUsers ? (
+          <div className="flex flex-col p-2">
+            {loadingMessageList ? (
               <div className="p-4 text-center text-slate-400">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                <span className="text-xs">Loading clients...</span>
+                <span className="text-xs">Loading messages...</span>
               </div>
-            ) : users.length === 0 ? (
+            ) : messageList.length === 0 ? (
               <div className="p-4 text-center text-slate-500 text-sm">
-                No active clients found.
+                No messages found.
               </div>
             ) : (
-              users.map((user) => (
-                <button
-                  key={user.id}
-                  onClick={() => setSelectedUser(user)}
-                  className={`
-                    flex items-center gap-3 p-3 rounded-lg text-left transition-colors
-                    ${selectedUser?.id === user.id 
-                      ? "bg-primary/10 border-primary/20 border" 
-                      : "hover:bg-slate-100 border border-transparent"
-                    }
-                  `}
-                >
-                  <Avatar className="h-10 w-10 border">
-                    <AvatarFallback className={selectedUser?.id === user.id ? "bg-primary text-primary-foreground" : "bg-slate-200"}>
-                      {getInitials(user.full_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-sm truncate text-slate-900">
-                        {user.full_name || "Unknown User"}
-                      </span>
-                      {/* Assuming active indicator logic could go here later */}
+              messageList.map((msg) => {
+                const isUnread = !msg.is_read;
+                const senderUser = users.find((u) => u.id === msg.sender_id);
+                
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "group relative flex items-start gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer border",
+                      isUnread
+                        ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
+                        : "bg-white border-transparent hover:bg-slate-50",
+                      selectedUser?.id === msg.sender_id && "bg-primary/5 border-primary/20"
+                    )}
+                    onClick={() => {
+                      if (senderUser) {
+                        setSelectedUser(senderUser);
+                        setViewMode("chat");
+                      }
+                    }}
+                  >
+                    <Avatar className="h-10 w-10 border shrink-0">
+                      <AvatarFallback className={isUnread ? "bg-blue-200 text-blue-700" : "bg-slate-200"}>
+                        {getInitials(senderUser?.full_name || msg.sender_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className={cn(
+                                "text-sm truncate",
+                                isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"
+                              )}
+                            >
+                              {senderUser?.full_name || msg.sender_name}
+                            </span>
+                            {isUnread && (
+                              <div className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
+                            )}
+                          </div>
+                          <p
+                            className={cn(
+                              "text-xs truncate mb-1",
+                              isUnread ? "text-slate-700 font-medium" : "text-slate-500"
+                            )}
+                          >
+                            {msg.sender_email}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-sm line-clamp-2",
+                              isUnread ? "text-slate-800 font-medium" : "text-slate-600"
+                            )}
+                          >
+                            {msg.content}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {formatTime(msg.created_at)}
+                          </p>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleReadStatus(msg.id, msg.is_read);
+                              }}
+                              className="font-body"
+                            >
+                              {msg.is_read ? (
+                                <>
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Mark as Unread
+                                </>
+                              ) : (
+                                <>
+                                  <MailOpen className="h-4 w-4 mr-2" />
+                                  Mark as Read
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-500 truncate">
-                      {user.email}
-                    </p>
                   </div>
-                </button>
-              ))
+                );
+              })
             )}
           </div>
         </ScrollArea>

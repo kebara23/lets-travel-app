@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { createClient } from "@/lib/supabase/client";
+import { useActiveUserLocations } from "@/hooks/useActiveUserLocations";
+import { createAvatarMarker, isStale } from "@/components/ui/AvatarMarker";
 import { Badge } from "@/components/ui/badge";
-import { Users, MapPin, LocateFixed } from "lucide-react";
+import { Users, MapPin, Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import L from "leaflet";
 
 // Carga dinámica del mapa para evitar error de servidor
 const Map = dynamic(
@@ -14,122 +17,179 @@ const Map = dynamic(
     ssr: false,
     loading: () => (
       <div className="w-full h-full flex items-center justify-center bg-slate-100 animate-pulse">
-        <p className="text-slate-400">Cargando Mapa...</p>
+        <p className="text-slate-400 font-body">Loading Map...</p>
       </div>
     ),
   }
 );
 
-type TrackingData = {
-  user_id: string;
-  lat: number;
-  lng: number;
-};
-
-let watchId: number | null = null;
-
-export default function TrackerPage() {
-  const [isSharing, setIsSharing] = useState(false);
-  const [currentPosition, setCurrentPosition] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
-  const supabase = createClient();
-
-  // Función para guardar posición
-  async function upsertLocation(position: GeolocationPosition) {
-    const { latitude, longitude } = position.coords;
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (user) {
-      const payload = {
-        user_id: user.id,
-        lat: latitude,
-        lng: longitude,
-        is_active: true,
-      };
-
-      const { error } = await supabase
-        .from('device_tracking')
-        .upsert(payload, { onConflict: 'user_id' });
-      
-      if (!error) {
-        setCurrentPosition(payload);
-      }
-    }
+// Calculate center point from active users
+function calculateCenter(users: { lat: number; lng: number }[]): [number, number] {
+  if (users.length === 0) {
+    // Default center (you can change this to your default location)
+    return [9.7489, -83.7534]; // Costa Rica default
   }
 
-  // Lógica de Geolocalización
+  const validUsers = users.filter((u) => u.lat && u.lng);
+  if (validUsers.length === 0) {
+    return [9.7489, -83.7534];
+  }
+
+  const avgLat = validUsers.reduce((sum, u) => sum + u.lat, 0) / validUsers.length;
+  const avgLng = validUsers.reduce((sum, u) => sum + u.lng, 0) / validUsers.length;
+
+  return [avgLat, avgLng];
+}
+
+// Format time ago
+function formatTimeAgo(dateString: string): string {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+
+  if (diffInMinutes < 1) return "Just now";
+  if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes !== 1 ? "s" : ""} ago`;
+  if (diffInHours < 24) return `${diffInHours} hour${diffInHours !== 1 ? "s" : ""} ago`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays} day${diffInDays !== 1 ? "s" : ""} ago`;
+}
+
+export default function AdminTrackerPage() {
+  const { activeUsers, loading, error, refetch } = useActiveUserLocations();
+  const { toast } = useToast();
+
+  // Inject custom marker styles
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (isSharing) {
-      if (watchId === null) {
-        watchId = navigator.geolocation.watchPosition(
-          upsertLocation,
-          (error) => {
-            console.error("GPS Error:", error);
-            setIsSharing(false);
-            toast({ title: "GPS Error", description: "Enable location access.", variant: "destructive" });
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
+    const style = document.createElement("style");
+    style.textContent = `
+      .custom-avatar-marker {
+        background: transparent !important;
+        border: none !important;
       }
-    } else {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
-    }
-
+    `;
+    document.head.appendChild(style);
     return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
+      document.head.removeChild(style);
     };
-  }, [isSharing]);
-
-  // Carga inicial simulada
-  useEffect(() => {
-    setLoading(false);
   }, []);
 
+  // Transform active users to map markers
+  const markers = useMemo(() => {
+    return activeUsers.map((user) => {
+      const stale = isStale(user.lastUpdated);
+      const icon = createAvatarMarker(user);
+      
+      const popupContent = `
+        <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 200px;">
+          <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px; color: #1e293b;">
+            ${user.name}
+          </div>
+          ${user.tripName ? `
+            <div style="font-size: 14px; color: #64748b; margin-bottom: 6px;">
+              <strong>Trip:</strong> ${user.tripName}
+            </div>
+          ` : ""}
+          <div style="font-size: 12px; color: ${stale ? "#ef4444" : "#10b981"}; margin-top: 8px;">
+            ${stale ? "⚠️ " : "🟢 "}Last seen ${formatTimeAgo(user.lastUpdated)}
+          </div>
+        </div>
+      `;
+
+      return {
+        lat: user.lat,
+        lng: user.lng,
+        popupText: popupContent,
+        icon,
+      };
+    });
+  }, [activeUsers]);
+
+  // Calculate map center
+  const center = useMemo(() => calculateCenter(activeUsers), [activeUsers]);
+  const zoom = activeUsers.length > 1 ? 10 : 13;
+
+  const activeCount = activeUsers.filter((u) => !isStale(u.lastUpdated)).length;
+  const staleCount = activeUsers.filter((u) => isStale(u.lastUpdated)).length;
+
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-50">
+    <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-slate-50">
+      {/* Header */}
       <div className="p-6 bg-white border-b shadow-sm z-10">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Location Sharing</h1>
-            <p className="text-sm text-slate-500">Real-time safety tracking</p>
+            <h1 className="text-2xl font-bold text-slate-900 font-body">Live Tracker</h1>
+            <p className="text-sm text-slate-500 font-body">Monitor active client locations in real-time</p>
           </div>
-          <Badge variant={isSharing ? "default" : "secondary"} className={isSharing ? "bg-green-600" : ""}>
-            {isSharing ? "Active" : "Inactive"}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={loading}
+              className="font-body"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-lg border cursor-pointer" onClick={() => setIsSharing(!isSharing)}>
-          <div className="flex-1">
-             <span className="font-medium block text-slate-900">Enable GPS</span>
-             <span className="text-xs text-slate-500">Tap to share location.</span>
-          </div>
-          <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${isSharing ? 'bg-green-600' : 'bg-gray-300'}`}>
-            <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${isSharing ? 'translate-x-6' : 'translate-x-0'}`} />
-          </div>
+        {/* Stats */}
+        <div className="flex gap-4">
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 font-body">
+            <Users className="h-3 w-3 mr-1" />
+            {activeCount} Active
+          </Badge>
+          {staleCount > 0 && (
+            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-body">
+              <MapPin className="h-3 w-3 mr-1" />
+              {staleCount} Offline
+            </Badge>
+          )}
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-body">
+            Total: {activeUsers.length}
+          </Badge>
         </div>
       </div>
 
+      {/* Map */}
       <div className="flex-1 relative bg-slate-200">
-        {currentPosition ? (
-          <Map markers={[{ lat: currentPosition.lat, lng: currentPosition.lng, popupText: "You", userId: currentPosition.user_id }]} center={[currentPosition.lat, currentPosition.lng]} zoom={15} />
-        ) : (
+        {loading ? (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-8">
-            <LocateFixed className="w-16 h-16 mb-4 opacity-50" />
-            <p>Waiting for GPS...</p>
+            <Loader2 className="w-12 h-12 mb-4 animate-spin opacity-50" />
+            <p className="font-body">Loading active locations...</p>
           </div>
+        ) : error ? (
+          <div className="w-full h-full flex flex-col items-center justify-center text-red-400 p-8">
+            <MapPin className="w-12 h-12 mb-4 opacity-50" />
+            <p className="font-body">Error loading locations. Please try again.</p>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              className="mt-4 font-body"
+            >
+              Retry
+            </Button>
+          </div>
+        ) : activeUsers.length === 0 ? (
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-8">
+            <MapPin className="w-16 h-16 mb-4 opacity-50" />
+            <p className="font-body text-lg font-semibold mb-2">No Active Locations</p>
+            <p className="font-body text-sm">No clients are currently sharing their location.</p>
+          </div>
+        ) : (
+          <Map 
+            markers={markers} 
+            center={center} 
+            zoom={zoom}
+            className="w-full h-full"
+          />
         )}
       </div>
     </div>
   );
 }
-// Force Vercel Rebuild
 

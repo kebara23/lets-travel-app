@@ -27,6 +27,15 @@ type MapProps = {
   style?: React.CSSProperties;
 };
 
+// Enhanced Popup component with HTML support
+function EnhancedPopup({ content }: { content: string }) {
+  return (
+    <Popup>
+      <div dangerouslySetInnerHTML={{ __html: content }} />
+    </Popup>
+  );
+}
+
 // Exportamos como "Map" (Named Export) para que coincida con el import dinámico
 export function Map({ markers, center, zoom, className, style }: MapProps) {
   const [isMounted, setIsMounted] = useState(false);
@@ -80,13 +89,7 @@ export function Map({ markers, center, zoom, className, style }: MapProps) {
           position={[marker.lat, marker.lng]}
           icon={marker.icon} // Si es undefined, usa el default
         >
-          <Popup>
-            <div className="font-sans text-sm font-medium">
-              {marker.popupText.split('\n').map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
-            </div>
-          </Popup>
+          <EnhancedPopup content={marker.popupText} />
         </Marker>
       ))}
     </MapContainer>

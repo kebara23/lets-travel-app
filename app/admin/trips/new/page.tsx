@@ -76,7 +76,7 @@ export default function NewTripPage() {
       }
 
       if (!clientId || clientId === "") {
-        alert("Por favor selecciona un cliente");
+        alert("Por favor selecciona un cliente o 'OPEN' para crear una plantilla");
         setIsLoading(false);
         return;
       }
@@ -223,6 +223,7 @@ export default function NewTripPage() {
                   required
                 >
                   <option value="">-- Select a client --</option>
+                  <option value="00000000-0000-0000-0000-000000000000">OPEN (Template)</option>
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>
                       {client.full_name} ({client.email})

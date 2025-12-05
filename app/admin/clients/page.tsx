@@ -20,6 +20,14 @@ import { Search, User, Settings, Mail, Phone, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type Trip = {
+  id: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+};
 
 type Client = {
   id: string;
@@ -30,7 +38,28 @@ type Client = {
   country_code: string | null;
   is_active: boolean | null;
   created_at: string;
+  trips?: Trip[];
 };
+
+// Calculate if client has an active trip (startDate <= today <= endDate)
+function hasActiveTrip(client: Client): boolean {
+  if (!client.trips || client.trips.length === 0) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return client.trips.some((trip) => {
+    const startDate = new Date(trip.start_date);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const endDate = new Date(trip.end_date);
+    endDate.setHours(0, 0, 0, 0);
+
+    return startDate <= today && today <= endDate;
+  });
+}
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -55,13 +84,34 @@ export default function ClientsPage() {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("id, email, full_name, username, phone, country_code, is_active, created_at")
+        .select(`
+          id,
+          email,
+          full_name,
+          username,
+          phone,
+          country_code,
+          is_active,
+          created_at,
+          trips:trips!user_id (
+            id,
+            start_date,
+            end_date,
+            status
+          )
+        `)
         .eq("role", "client")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setClients(data || []);
+      // Transform data to handle Supabase's relation format
+      const transformedClients = (data || []).map((client: any) => ({
+        ...client,
+        trips: Array.isArray(client.trips) ? client.trips : [],
+      }));
+
+      setClients(transformedClients as Client[]);
     } catch (error: any) {
       console.error("Error fetching clients:", error);
       toast({
@@ -89,11 +139,11 @@ export default function ClientsPage() {
       );
     }
 
-    // Status filter
+    // Status filter based on trip activity (not is_active field)
     if (statusFilter !== "all") {
       filtered = filtered.filter((client) => {
-        const isActive = client.is_active !== false; // Default to true if null
-        return statusFilter === "active" ? isActive : !isActive;
+        const hasActive = hasActiveTrip(client);
+        return statusFilter === "active" ? hasActive : !hasActive;
       });
     }
 
@@ -155,29 +205,17 @@ export default function ClientsPage() {
             </div>
 
             {/* Status Filter */}
-            <div className="flex gap-2">
-              <Button
-                variant={statusFilter === "all" ? "default" : "outline"}
-                onClick={() => setStatusFilter("all")}
-                className="font-body"
-              >
-                All
-              </Button>
-              <Button
-                variant={statusFilter === "active" ? "default" : "outline"}
-                onClick={() => setStatusFilter("active")}
-                className="font-body"
-              >
-                Active
-              </Button>
-              <Button
-                variant={statusFilter === "inactive" ? "default" : "outline"}
-                onClick={() => setStatusFilter("inactive")}
-                className="font-body"
-              >
-                Inactive
-              </Button>
-            </div>
+            <Tabs
+              value={statusFilter}
+              onValueChange={(v) => setStatusFilter(v as "all" | "active" | "inactive")}
+              className="w-auto"
+            >
+              <TabsList className="font-body">
+                <TabsTrigger value="all">Show All</TabsTrigger>
+                <TabsTrigger value="active">Active Only</TabsTrigger>
+                <TabsTrigger value="inactive">Inactive</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </CardContent>
       </Card>
@@ -276,19 +314,24 @@ export default function ClientsPage() {
                           </div>
                         </TableCell>
 
-                        {/* Status Column */}
+                        {/* Status Column - Based on Trip Activity */}
                         <TableCell>
-                          <Badge
-                            className={cn(
-                              "font-body",
-                              isActive
-                                ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-100"
-                                : "bg-red-100 text-red-700 border-red-200 hover:bg-red-100"
-                            )}
-                            variant="outline"
-                          >
-                            {isActive ? "Active" : "Inactive"}
-                          </Badge>
+                          {(() => {
+                            const hasActive = hasActiveTrip(client);
+                            return (
+                              <Badge
+                                className={cn(
+                                  "font-body",
+                                  hasActive
+                                    ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-100"
+                                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                )}
+                                variant="outline"
+                              >
+                                {hasActive ? "En Viaje" : "Inactivo"}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
 
                         {/* Actions Column */}
