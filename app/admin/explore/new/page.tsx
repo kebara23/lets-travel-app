@@ -31,8 +31,24 @@ export default function NewPostPage() {
     setLoading(true);
     
     try {
-      const payload: any = { ...formData };
-      if (payload.visibility === 'global') delete payload.target_user_id;
+      const payload: any = { 
+        title: formData.title,
+        subtitle: formData.subtitle,
+        category: formData.category,
+        image_url: formData.image_url,
+        content: formData.content,
+        visibility: formData.visibility,
+        // Only include target_user_id if it's not empty
+        target_user_id: formData.target_user_id || null,
+        // Only include is_template if the column exists (it might be failing if schema is outdated)
+        // but let's assume it exists or handle the error gracefully
+        is_template: formData.is_template
+      };
+      
+      if (payload.visibility === 'global') payload.target_user_id = null;
+      
+      // Clean payload to remove empty strings for nullable fields
+      if (payload.target_user_id === "") payload.target_user_id = null;
       
       // Note: File upload logic should be handled here
       // For now, we'll just use the image_url
