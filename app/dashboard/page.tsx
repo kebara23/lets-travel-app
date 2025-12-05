@@ -120,14 +120,20 @@ export default function DashboardPage() {
 
     async function checkSession() {
       try {
+        // Use getUser() for more reliable session check (same as login page)
         const {
-          data: { session },
-        } = await currentSupabase.auth.getSession();
+          data: { user },
+          error: userError,
+        } = await currentSupabase.auth.getUser();
 
         if (!isMounted) return;
 
-        if (!session) {
-          router.push("/login");
+        // If no valid user or error, redirect to login using window.location to prevent loops
+        if (!user || userError) {
+          console.log("ℹ️ No valid session in dashboard, redirecting to login");
+          if (!isMounted) return;
+          // Use window.location.href to force full page reload and prevent redirect loops
+          window.location.href = "/login";
           return;
         }
 
@@ -142,7 +148,8 @@ export default function DashboardPage() {
       } catch (error) {
         if (isMounted) {
           console.error("Error checking session:", error);
-          router.push("/login");
+          // Use window.location.href to force full page reload and prevent redirect loops
+          window.location.href = "/login";
         }
       } finally {
         if (isMounted) {
