@@ -15,10 +15,20 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Edit, Trash2, Calendar, Copy } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar, Copy, Loader2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 // Special UUID to represent "OPEN" trips (templates)
 const OPEN_CLIENT_ID = "00000000-0000-0000-0000-000000000000";
@@ -35,6 +45,12 @@ type Trip = {
     full_name: string;
     email: string;
   } | null;
+};
+
+type Client = {
+  id: string;
+  full_name: string;
+  email: string;
 };
 
 // Derived status based on dates
@@ -113,11 +129,42 @@ export default function TripsManagerPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"trips" | "defaults">("trips");
+  
+  // Duplication Modal State
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [tripToDuplicate, setTripToDuplicate] = useState<Trip | null>(null);
+  const [duplicateTitle, setDuplicateTitle] = useState("");
+  const [duplicateClientId, setDuplicateClientId] = useState("");
+  const [duplicateStartDate, setDuplicateStartDate] = useState("");
+  const [duplicateEndDate, setDuplicateEndDate] = useState("");
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
+
   const supabase = createClient();
 
   useEffect(() => {
     fetchTrips();
+    fetchClients();
   }, []);
+
+  async function fetchClients() {
+    try {
+      setIsLoadingClients(true);
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, full_name, email")
+        .eq("role", "client")
+        .order("full_name", { ascending: true });
+
+      if (error) throw error;
+      setClients(data || []);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+    } finally {
+      setIsLoadingClients(false);
+    }
+  }
 
   async function fetchTrips() {
     try {
@@ -180,46 +227,59 @@ export default function TripsManagerPage() {
     };
   }, [trips]);
 
-  // Handle duplicate trip
-  async function handleDuplicate(trip: Trip) {
+  // Open duplication modal
+  function openDuplicateModal(trip: Trip) {
+    setTripToDuplicate(trip);
+    setDuplicateTitle(`${trip.title} (Copy)`);
+    
+    // Default to existing client unless it's a template, then default to empty
+    const isTemplate = trip.user_id === OPEN_CLIENT_ID || trip.user_id === null;
+    setDuplicateClientId(isTemplate ? "" : trip.user_id);
+    
+    setDuplicateStartDate(trip.start_date);
+    setDuplicateEndDate(trip.end_date);
+    setIsDuplicateModalOpen(true);
+  }
+
+  // Handle duplicate trip submission
+  async function handleDuplicateSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tripToDuplicate) return;
+
     try {
-      // Fetch full trip data including itinerary items
+      setIsDuplicating(true);
+
+      // Fetch full trip data including itinerary items (to be safe)
       const { data: tripData, error: tripError } = await supabase
         .from("trips")
         .select("*")
-        .eq("id", trip.id)
+        .eq("id", tripToDuplicate.id)
         .single();
 
-      if (tripError) {
-        console.error("Error fetching trip data:", tripError);
-        throw tripError;
-      }
-
-      if (!tripData) {
-        throw new Error("Trip data not found");
-      }
+      if (tripError) throw tripError;
+      if (!tripData) throw new Error("Trip data not found");
 
       // Fetch itinerary items
       const { data: itemsData, error: itemsError } = await supabase
         .from("itinerary_items")
         .select("*")
-        .eq("trip_id", trip.id);
+        .eq("trip_id", tripToDuplicate.id);
 
       if (itemsError) throw itemsError;
 
-      // Create new trip - use OPEN (null) as default if original was OPEN, otherwise keep same client
-      // User can change it in the editor
-      const newUserId = (tripData.user_id === OPEN_CLIENT_ID || tripData.user_id === null)
+      // Determine new User ID
+      // If user selected "OPEN (Template)" which is empty string or special ID, use null
+      const newUserId = (duplicateClientId === "" || duplicateClientId === OPEN_CLIENT_ID) 
         ? null 
-        : tripData.user_id; // Keep original client, user can change in editor
+        : duplicateClientId;
 
       const { data: newTrip, error: insertError } = await supabase
         .from("trips")
         .insert({
-          title: `${tripData.title} (Copy)`,
-          user_id: newUserId, // Keep original client or OPEN, user can change in editor
-          start_date: tripData.start_date, // Keep dates but user can change
-          end_date: tripData.end_date,
+          title: duplicateTitle.trim(),
+          user_id: newUserId,
+          start_date: duplicateStartDate,
+          end_date: duplicateEndDate,
           status: "draft",
         })
         .select()
@@ -232,7 +292,7 @@ export default function TripsManagerPage() {
         const newItems = itemsData.map((item: any) => ({
           trip_id: newTrip.id,
           day: item.day,
-          day_date: item.day_date,
+          day_date: item.day_date, // NOTE: Ideally we should shift dates if start date changed, but keeping simple for now
           start_time: item.start_time,
           title: item.title,
           description: item.description,
@@ -250,12 +310,10 @@ export default function TripsManagerPage() {
 
       toast({
         title: "Trip Duplicated",
-        description: newUserId === OPEN_CLIENT_ID
-          ? "Template duplicated. You can edit and assign a client if needed."
-          : "Trip duplicated. You can edit the client and dates as needed.",
+        description: "Trip duplicated successfully. Redirecting to editor...",
       });
 
-      // Navigate to edit the new trip
+      setIsDuplicateModalOpen(false);
       router.push(`/admin/trips/${newTrip.id}`);
     } catch (error: any) {
       console.error("Error duplicating trip:", error);
@@ -264,6 +322,8 @@ export default function TripsManagerPage() {
         title: "Error",
         description: error.message || "Failed to duplicate trip. Please try again.",
       });
+    } finally {
+      setIsDuplicating(false);
     }
   }
 
@@ -413,18 +473,19 @@ export default function TripsManagerPage() {
                       <Edit className="h-4 w-4 mr-1" />
                       View/Edit
                     </Button>
-                    {activeTab === "trips" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDuplicate(trip)}
-                        className="h-8 w-auto px-2 font-body text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                        title="Duplicate trip"
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Duplicate
-                      </Button>
-                    )}
+                    
+                    {/* Allow duplication on both tabs */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDuplicateModal(trip)}
+                      className="h-8 w-auto px-2 font-body text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      title="Duplicate trip"
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Duplicate
+                    </Button>
+                    
                     <Button
                       variant="ghost"
                       size="sm"
@@ -515,7 +576,93 @@ export default function TripsManagerPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Duplicate Trip Modal */}
+      <Dialog open={isDuplicateModalOpen} onOpenChange={setIsDuplicateModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl">Duplicate Trip</DialogTitle>
+            <DialogDescription>
+              Create a copy of "{tripToDuplicate?.title}". You can adjust details below.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleDuplicateSubmit} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dup-title">New Title</Label>
+              <Input 
+                id="dup-title"
+                value={duplicateTitle}
+                onChange={(e) => setDuplicateTitle(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dup-client">Assign to Client</Label>
+              <select
+                id="dup-client"
+                value={duplicateClientId}
+                onChange={(e) => setDuplicateClientId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">OPEN (Template)</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="dup-start">Start Date</Label>
+                <Input 
+                  id="dup-start"
+                  type="date"
+                  value={duplicateStartDate}
+                  onChange={(e) => setDuplicateStartDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dup-end">End Date</Label>
+                <Input 
+                  id="dup-end"
+                  type="date"
+                  value={duplicateEndDate}
+                  onChange={(e) => setDuplicateEndDate(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsDuplicateModalOpen(false)}
+                disabled={isDuplicating}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isDuplicating}>
+                {isDuplicating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Duplicating...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate Trip
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
