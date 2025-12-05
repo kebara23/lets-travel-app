@@ -1,15 +1,52 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ConciergeBell, X, AlertTriangle, MessageCircle, MapPin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 
 export function ConciergeRing() {
   const router = useRouter();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const isDraggingRef = useRef(false);
+  const supabase = createClient();
+
+  // Only show if authenticated and not on public pages
+  useEffect(() => {
+    const publicRoutes = ["/login", "/signup", "/"];
+    
+    // Quick check for route first to avoid flicker
+    if (publicRoutes.includes(pathname || "")) {
+      setIsVisible(false);
+      return;
+    }
+
+    // Check authentication
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsVisible(!!session);
+    }
+
+    checkAuth();
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const isPublic = publicRoutes.includes(window.location.pathname);
+      if (isPublic) {
+        setIsVisible(false);
+      } else {
+        setIsVisible(!!session);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [pathname, supabase]);
 
   const toggleMenu = () => {
     if (!isDraggingRef.current) {
@@ -22,11 +59,17 @@ export function ConciergeRing() {
     router.push(path);
   };
 
+  // Don't render anything if not visible
+  if (!isVisible) return null;
+
   return (
     <motion.div 
       className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 touch-none"
       drag
       dragMomentum={false}
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
       onDragStart={() => {
         isDraggingRef.current = true;
       }}
