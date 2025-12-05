@@ -350,11 +350,7 @@ export default function LoginPage() {
           <CardContent className="space-y-6">
             <Form {...form}>
               <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  console.log("📱 Form submitted on mobile");
-                  form.handleSubmit(onSubmit)(e);
-                }} 
+                onSubmit={form.handleSubmit(onSubmit)} 
                 className="space-y-6 w-full"
                 noValidate
               >
@@ -417,19 +413,21 @@ export default function LoginPage() {
                       formValid: form.formState.isValid,
                       formErrors: form.formState.errors,
                       email: form.getValues("email"),
-                      passwordLength: form.getValues("password")?.length
+                      passwordLength: form.getValues("password")?.length,
+                      supabaseReady: !!supabase
                     });
                     
-                    // Ensure form submission works on mobile
-                    // Don't prevent default - let the form submit naturally
-                    // But also manually trigger if needed
-                    const values = form.getValues();
-                    if (values.email && values.password && !isLoading) {
-                      console.log("📱 Manually triggering form submission");
-                      // Small delay to ensure form state is ready
-                      setTimeout(() => {
-                        form.handleSubmit(onSubmit)();
-                      }, 50);
+                    // If form is not valid but has values, try to submit anyway
+                    // This helps with mobile touch events that might not trigger form validation properly
+                    if (!isLoading && supabase) {
+                      const values = form.getValues();
+                      if (values.email && values.password) {
+                        console.log("📱 Attempting direct submission with values");
+                        // Trigger form submission directly
+                        onSubmit(values).catch((error) => {
+                          console.error("📱 Direct submission error:", error);
+                        });
+                      }
                     }
                   }}
                 >
