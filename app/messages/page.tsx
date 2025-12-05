@@ -240,7 +240,7 @@ export default function MessagesPage() {
       </header>
 
       {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24 lg:pb-4">
         {/* Welcome Badge */}
         <div className="flex justify-center">
           <span className="bg-muted text-muted-foreground text-xs py-1 px-3 rounded-full">

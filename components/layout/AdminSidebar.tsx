@@ -73,8 +73,8 @@ export function AdminSidebar() {
       });
     } finally {
       // Always redirect to login, even if there was an error
-      router.push("/login");
-      router.refresh();
+      // Use window.location to force a full page reload and clear any cached session state
+      window.location.href = "/login";
     }
   };
 

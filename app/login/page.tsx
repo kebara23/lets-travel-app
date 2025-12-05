@@ -67,6 +67,7 @@ export default function LoginPage() {
   }, [toast]);
 
   // Check if user is already logged in (non-blocking)
+  // Add a small delay to allow signOut to complete if user was just logged out
   useEffect(() => {
     if (!supabase) return;
 
@@ -75,6 +76,11 @@ export default function LoginPage() {
 
     async function checkSession() {
       try {
+        // Small delay to allow signOut to complete if user was just logged out
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (!isMounted) return;
+        
         const {
           data: { session },
         } = await currentSupabase.auth.getSession();

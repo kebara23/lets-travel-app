@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationBell } from "@/components/ui/NotificationBell";
+import { Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function AdminLayout({
   children,
@@ -13,6 +17,7 @@ export default function AdminLayout({
 }) {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
 
@@ -120,13 +125,42 @@ export default function AdminLayout({
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
-      <Sidebar />
+      {/* Backdrop - Mobile Only */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar - Responsive */}
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+      />
+
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-100">
         {/* Admin Header */}
-        <header className="h-16 border-b bg-white px-8 flex items-center justify-between shadow-sm sticky top-0 z-10">
-          <div className="text-sm text-muted-foreground">Admin Workspace</div>
+        <header className="h-16 border-b bg-white px-4 md:px-8 flex items-center justify-between shadow-sm sticky top-0 z-10">
+          <div className="flex items-center gap-4">
+            {/* Hamburger Menu - Mobile Only */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="h-6 w-6" />
+            </Button>
+            <div className="text-sm text-muted-foreground">Admin Workspace</div>
+          </div>
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+          </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {children}
         </div>
       </main>

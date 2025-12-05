@@ -430,8 +430,8 @@ export default function DashboardPage() {
       });
     } finally {
       // Always redirect to login
-      router.push("/login");
-      router.refresh();
+      // Use window.location to force a full page reload and clear any cached session state
+      window.location.href = "/login";
     }
   }
 
