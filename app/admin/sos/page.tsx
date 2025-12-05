@@ -345,7 +345,7 @@ export default function SOSCenterPage() {
         {/* Left Column - Alerts List */}
         <div className={cn(
           "w-full lg:w-96 border-r bg-white overflow-y-auto flex-shrink-0",
-          selectedAlert && "hidden lg:block" // Hide list on mobile when alert is selected
+          selectedAlert ? "hidden lg:block" : "block" // Hide list on mobile when alert is selected, show on desktop always
         )}>
           <div className="p-4 space-y-3">
             {alerts.length === 0 ? (
