@@ -11,6 +11,8 @@ import {
   MapPin,
   ChevronDown,
   ChevronUp,
+  Car,
+  HelpCircle,
 } from "lucide-react";
 import { ItineraryItem } from "@/hooks/useItinerary";
 import { cn } from "@/lib/utils";
@@ -22,18 +24,20 @@ type TimelineItemProps = {
   isUpdating?: boolean;
 };
 
-const typeIcons = {
+const typeIcons: Record<string, any> = {
   flight: Plane,
   hotel: Hotel,
   activity: MapPin,
   food: UtensilsCrossed,
+  transport: Car,
 };
 
-const typeColors = {
+const typeColors: Record<string, string> = {
   flight: "bg-blue-100 text-blue-700 border-blue-200",
   hotel: "bg-purple-100 text-purple-700 border-purple-200",
   activity: "bg-primary/10 text-primary border-primary/20",
   food: "bg-luxury/20 text-luxury border-luxury/30",
+  transport: "bg-orange-100 text-orange-700 border-orange-200",
 };
 
 export function TimelineItem({
@@ -43,8 +47,10 @@ export function TimelineItem({
   isUpdating = false,
 }: TimelineItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const Icon = typeIcons[item.type];
-  const typeColor = typeColors[item.type];
+  
+  // Fallback for unknown types
+  const Icon = typeIcons[item.type] || HelpCircle;
+  const typeColor = typeColors[item.type] || "bg-slate-100 text-slate-700 border-slate-200";
 
   const handleToggle = (checked: boolean | "indeterminate") => {
     // Handle both boolean and "indeterminate" string from checkbox
@@ -119,7 +125,7 @@ export function TimelineItem({
                     ? "text-muted-foreground/70 line-through" 
                     : "text-muted-foreground"
                 )}>
-                  <span className="font-medium">{item.time}</span>
+                  <span className="font-medium">{item.time || "Time not set"}</span>
                   {item.location && (
                     <>
                       <span>•</span>
@@ -165,4 +171,3 @@ export function TimelineItem({
     </div>
   );
 }
-

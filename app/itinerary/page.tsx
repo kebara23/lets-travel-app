@@ -18,7 +18,7 @@ type ItineraryItemDB = {
   title: string;
   description: string | null;
   type: "flight" | "hotel" | "activity" | "food" | "transport";
-  start_time: string;
+  start_time: string | null;
   day: number;
   day_date: string;
   is_completed: boolean;
@@ -127,14 +127,14 @@ export default function ItineraryPage() {
       id: item.id,
       trip_id: trip.id,
       day: item.day,
-      time: item.start_time, // Mapear start_time a time
+      time: item.start_time || "TBD", // Safe fallback for null time
       title: item.title,
       description: item.description,
       type: item.type as "flight" | "hotel" | "activity" | "food",
       location: item.location_data 
         ? (typeof item.location_data === 'string' 
             ? item.location_data 
-            : item.location_data.name || item.location_data.address || null)
+            : (item.location_data.name as string) || (item.location_data.address as string) || null)
         : null,
       is_completed: item.is_completed,
       created_at: item.day_date || new Date().toISOString(),
@@ -186,8 +186,10 @@ export default function ItineraryPage() {
     const sortedGrouped: Record<number, HookItineraryItem[]> = {};
     sortedDays.forEach((day) => {
       sortedGrouped[day] = grouped[day].sort((a, b) => {
-        // Sort by time within each day
-        return a.time.localeCompare(b.time);
+        // Sort by time within each day - safe comparison
+        const timeA = a.time || "";
+        const timeB = b.time || "";
+        return timeA.localeCompare(timeB);
       });
     });
     
