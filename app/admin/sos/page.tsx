@@ -11,6 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Phone, CheckCircle, MapPin, Clock, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Centralized WhatsApp number for all admin/SOS communications (Costa Rica)
+const ADMIN_WHATSAPP_NUMBER = "50688318381"; // format for wa.me: country code + number, no plus sign
+
 // Dynamically import Map component with SSR disabled
 const Map = dynamic(
   () => import("@/components/ui/Map").then((mod) => ({ default: mod.Map })),
@@ -262,20 +265,10 @@ export default function SOSCenterPage() {
   }
 
   // Open WhatsApp
-  function openWhatsApp(phone: string | null) {
-    if (!phone) {
-      toast({
-        variant: "destructive",
-        title: "No Phone Number",
-        description: "This user doesn&apos;t have a phone number registered.",
-      });
-      return;
-    }
-
-    // Format phone number (remove any non-digit characters except +)
-    const cleanPhone = phone.replace(/[^\d+]/g, "");
-    const whatsappUrl = `https://wa.me/${cleanPhone}`;
-    window.open(whatappUrl, "_blank");
+  function openWhatsApp(_phone: string | null) {
+    // Always route SOS/admin chats to the Costa Rica number
+    const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}`;
+    window.open(whatsappUrl, "_blank");
   }
 
   // Get status badge variant

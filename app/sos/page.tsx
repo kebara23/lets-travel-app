@@ -8,8 +8,8 @@ import { ArrowLeft, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-// WhatsApp number for hotel concierge (replace with actual number)
-const HOTEL_WHATSAPP_NUMBER = "1234567890"; // Format: country code + number without + or spaces
+// WhatsApp number for hotel concierge (Costa Rica)
+const HOTEL_WHATSAPP_NUMBER = "50688318381"; // Format for wa.me: country code + number without + or spaces
 const HOLD_DURATION = 3000; // 3 seconds
 
 export default function SOSPage() {
