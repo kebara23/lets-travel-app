@@ -1,506 +1,249 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
-import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Loader2, Save, Upload, Image as ImageIcon, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { ClientCombobox } from "@/components/ui/client-combobox";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import Link from "next/link";
 
-type Client = {
-  id: string;
-  full_name: string;
-  email: string;
-};
-
-export default function EditExplorePostPage() {
+export default function EditPostPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const params = useParams();
-  const postId = params.id as string;
-  const { toast } = useToast();
   const supabase = createClient();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
   const [formData, setFormData] = useState({
-    title: "",
-    subtitle: "",
-    category: "destination",
-    content: "",
-    image_url: "",
-    visibility: "global" as "global" | "specific",
-    target_user_id: "",
+    title: "", subtitle: "", category: "Destination",
+    image_url: "", content: "", visibility: "global", target_user_id: "", is_template: false
   });
 
-  const categories = [
-    { value: "destination", label: "Destination" },
-    { value: "promotion", label: "Promotion" },
-    { value: "upgrade", label: "Upgrade" },
-    { value: "tip", label: "Tip" },
-  ];
-
-  // Fetch post data
   useEffect(() => {
-    if (postId) {
-      fetchPost();
-      fetchClients();
-    }
-  }, [postId]);
+    async function fetchPost() {
+      try {
+        const { data, error } = await supabase
+          .from("explore_posts")
+          .select("*")
+          .eq("id", params.id)
+          .single();
 
-  async function fetchPost() {
-    try {
-      const { data, error } = await supabase
-        .from("explore_posts")
-        .select("*")
-        .eq("id", postId)
-        .single();
+        if (error) throw error;
 
-      if (error) throw error;
-
-      if (data) {
-        setFormData({
-          title: data.title || "",
-          subtitle: data.subtitle || "",
-          category: data.category || "destination",
-          content: data.content || "",
-          image_url: data.image_url || "",
-          visibility: data.target_user_id ? "specific" : "global",
-          target_user_id: data.target_user_id || "",
-        });
-
-        if (data.image_url) {
-          setImagePreview(data.image_url);
+        if (data) {
+          setFormData({
+            title: data.title || "",
+            subtitle: data.subtitle || "",
+            category: data.category || "Destination",
+            image_url: data.image_url || "",
+            content: data.content || "",
+            visibility: data.visibility || "global",
+            target_user_id: data.target_user_id || "",
+            is_template: data.is_template || false,
+          });
         }
-      }
-    } catch (error: any) {
-      console.error("Error fetching post:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to load post.",
-      });
-      router.push("/admin/explore");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function fetchClients() {
-    setIsLoadingClients(true);
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id, full_name, email")
-        .eq("role", "client")
-        .order("full_name", { ascending: true });
-
-      if (error) throw error;
-
-      setClients(data || []);
-    } catch (error: any) {
-      console.error("Error fetching clients:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load clients.",
-      });
-    } finally {
-      setIsLoadingClients(false);
-    }
-  }
-
-  // Handle image file upload
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      toast({
-        variant: "destructive",
-        title: "Invalid file type",
-        description: "Please upload a valid image file (JPG, PNG, GIF, WEBP).",
-      });
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        variant: "destructive",
-        title: "File too large",
-        description: "Please upload an image smaller than 5MB.",
-      });
-      return;
-    }
-
-    setUploading(true);
-    const fileName = `explore_${Date.now()}_${file.name}`;
-    const filePath = `explore/${fileName}`;
-
-    try {
-      // 1. Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("trip-docs")
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
+      } catch (error: any) {
+        console.error("Error fetching post:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load experience details.",
+          variant: "destructive",
         });
+        router.push("/admin/explore");
+      } finally {
+        setInitialLoading(false);
+      }
+    }
 
-      if (uploadError) throw uploadError;
+    fetchPost();
+  }, [params.id, supabase, router, toast]);
 
-      // 2. Get public URL
-      const { data: urlData } = supabase.storage
-        .from("trip-docs")
+  // Helper to upload image to Supabase Storage
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Authentication required for upload");
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `explore-images/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('explore-assets')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('explore-assets')
         .getPublicUrl(filePath);
 
-      if (!urlData?.publicUrl) {
-        throw new Error("Failed to get public URL");
-      }
-
-      // 3. Update form data and preview
-      setFormData({ ...formData, image_url: urlData.publicUrl });
-      setImagePreview(urlData.publicUrl);
-
-      toast({
-        title: "Image uploaded!",
-        description: "The image has been successfully uploaded.",
-      });
-    } catch (error: any) {
+      return publicUrl;
+    } catch (error) {
       console.error("Error uploading image:", error);
       toast({
         variant: "destructive",
-        title: "Error uploading image",
-        description: error.message || "Failed to upload image.",
+        title: "Upload Error",
+        description: "Failed to upload image. Please ensure 'explore-assets' bucket exists and is public."
       });
-    } finally {
-      setUploading(false);
-      // Reset input
-      e.target.value = "";
+      return null;
     }
-  }
+  };
 
-  // Remove image
-  function handleRemoveImage() {
-    setFormData({ ...formData, image_url: "" });
-    setImagePreview(null);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-
+    setLoading(true);
+    
     try {
-      if (!formData.title.trim() || !formData.content.trim()) {
-        throw new Error("Title and content are required.");
+      let finalImageUrl = formData.image_url;
+
+      if (selectedFile) {
+        const uploadedUrl = await uploadImage(selectedFile);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        } else {
+          setLoading(false);
+          return; 
+        }
       }
 
-      // Prepare update payload
-      const updateData: any = {
-        title: formData.title.trim(),
-        subtitle: formData.subtitle.trim() || null,
-        image_url: formData.image_url.trim() || null,
+      const payload: any = { 
+        title: formData.title,
+        subtitle: formData.subtitle,
         category: formData.category,
-        content: formData.content.trim(),
-        target_user_id: formData.visibility === "specific" && formData.target_user_id 
-          ? formData.target_user_id 
-          : null,
+        image_url: finalImageUrl,
+        content: formData.content,
+        visibility: formData.visibility,
+        target_user_id: formData.target_user_id || null,
+        is_template: formData.is_template
       };
-
-      const { data, error } = await supabase
+      
+      if (payload.visibility === 'global') payload.target_user_id = null;
+      if (payload.target_user_id === "") payload.target_user_id = null;
+      
+      const { error } = await supabase
         .from("explore_posts")
-        .update(updateData)
-        .eq("id", postId)
-        .select()
-        .single();
+        .update(payload)
+        .eq("id", params.id);
 
-      if (error) throw error;
-
-      toast({
-        title: "Post updated!",
-        description: "The post has been successfully updated.",
-      });
-
-      router.push("/admin/explore");
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Success", description: "Experience updated!" });
+        router.push("/admin/explore");
+      }
     } catch (error: any) {
-      console.error("Error updating post:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to update post.",
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update experience", 
+        variant: "destructive" 
       });
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
-  }
+  };
 
-  if (isLoading) {
+  if (initialLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-12 w-64" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="max-w-xl mx-auto p-6">
+      <Link href="/admin/explore" className="flex items-center text-slate-500 mb-4"><ArrowLeft className="w-4 h-4 mr-2"/> Back</Link>
+      <h1 className="text-2xl font-bold mb-6 text-slate-900">Edit Insider Experience</h1>
+      
+      <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-lg border">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 font-body">Edit Post</h1>
-          <p className="text-slate-600 mt-1 font-body">
-            Update post information for the Explore section
-          </p>
+          <Label>Title</Label>
+          <Input required placeholder="Ex: Private Dinner" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
         </div>
-        <Button
-          variant="outline"
-          onClick={() => router.push("/admin/explore")}
-          className="font-body"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Posts
+        <div>
+          <Label>Subtitle / Price</Label>
+          <Input placeholder="Ex: $150 USD" value={formData.subtitle} onChange={e => setFormData({...formData, subtitle: e.target.value})} />
+        </div>
+        <div>
+          <Label className="font-body">Image</Label>
+          <ImageUpload
+            value={formData.image_url}
+            onChange={(url) => setFormData({...formData, image_url: url})}
+            onFileSelect={(file) => setSelectedFile(file)}
+          />
+          {selectedFile && (
+            <p className="text-xs text-green-600 mt-2 font-body flex items-center">
+              ✓ File selected: {selectedFile.name} (will be uploaded on publish)
+            </p>
+          )}
+        </div>
+        <div>
+          <Label>Category</Label>
+          <Select onValueChange={v => setFormData({...formData, category: v})} value={formData.category}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Destination">Destination</SelectItem>
+              <SelectItem value="Dining">Dining</SelectItem>
+              <SelectItem value="Upgrade">Upgrade</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Visibility</Label>
+          <Select onValueChange={v => setFormData({...formData, visibility: v})} value={formData.visibility}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="global">Global (All Guests)</SelectItem>
+              <SelectItem value="user">Specific Guest (VIP)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {formData.visibility === 'user' && (
+          <div className="bg-amber-50 p-3 rounded border border-amber-200">
+            <Label className="font-body mb-2 block">Select Guest</Label>
+            <ClientCombobox
+              value={formData.target_user_id}
+              onValueChange={(value) => setFormData({...formData, target_user_id: value})}
+              placeholder="Search and select a client..."
+            />
+          </div>
+        )}
+
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="is_template"
+            checked={formData.is_template}
+            onChange={(e) => setFormData({...formData, is_template: e.target.checked})}
+            className="rounded border-slate-300"
+          />
+          <Label htmlFor="is_template" className="font-body cursor-pointer">
+            Save as Template (Default)
+          </Label>
+        </div>
+
+        <div>
+          <Label>Description</Label>
+          <Textarea className="h-32" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
+        </div>
+
+        <Button type="submit" className="w-full bg-slate-900" disabled={loading}>
+          {loading ? "Updating..." : "Update Experience"}
         </Button>
-      </div>
-
-      {/* Form */}
-      <Card className="bg-white border-slate-200">
-        <CardHeader>
-          <CardTitle className="font-body">Post Details</CardTitle>
-          <CardDescription className="font-body">
-            Update the information for this post
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Title */}
-            <div className="space-y-2">
-              <Label htmlFor="title" className="font-body">
-                Title <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="title"
-                type="text"
-                placeholder="Cena Romántica en la Playa"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                disabled={isSubmitting}
-                className="font-body"
-                required
-              />
-            </div>
-
-            {/* Subtitle/Price */}
-            <div className="space-y-2">
-              <Label htmlFor="subtitle" className="font-body">
-                Subtitle / Price
-              </Label>
-              <Input
-                id="subtitle"
-                type="text"
-                placeholder="Upgrade por $150"
-                value={formData.subtitle}
-                onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
-                disabled={isSubmitting}
-                className="font-body"
-              />
-              <p className="text-xs text-slate-500 font-body">
-                Optional subtitle or price information
-              </p>
-            </div>
-
-            {/* Category */}
-            <div className="space-y-2">
-              <Label htmlFor="category" className="font-body">
-                Category <span className="text-red-500">*</span>
-              </Label>
-              <select
-                id="category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                disabled={isSubmitting}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-body"
-                required
-              >
-                {categories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Visibility */}
-            <div className="space-y-2">
-              <Label htmlFor="visibility" className="font-body">
-                Visibility <span className="text-red-500">*</span>
-              </Label>
-              <select
-                id="visibility"
-                value={formData.visibility}
-                onChange={(e) => {
-                  const newVisibility = e.target.value as "global" | "specific";
-                  setFormData({
-                    ...formData,
-                    visibility: newVisibility,
-                    target_user_id: newVisibility === "global" ? "" : formData.target_user_id,
-                  });
-                }}
-                disabled={isSubmitting}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-body"
-                required
-              >
-                <option value="global">Global (All Users)</option>
-                <option value="specific">Specific User</option>
-              </select>
-              <p className="text-xs text-slate-500 font-body">
-                Choose who can see this post
-              </p>
-            </div>
-
-            {/* Target User Selector (only if visibility is "specific") */}
-            {formData.visibility === "specific" && (
-              <div className="space-y-2">
-                <Label htmlFor="target_user_id" className="font-body">
-                  Select Client <span className="text-red-500">*</span>
-                </Label>
-                {isLoadingClients ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-600 font-body">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading clients...</span>
-                  </div>
-                ) : (
-                  <select
-                    id="target_user_id"
-                    value={formData.target_user_id}
-                    onChange={(e) => setFormData({ ...formData, target_user_id: e.target.value })}
-                    disabled={isSubmitting || isLoadingClients}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-body"
-                    required={formData.visibility === "specific"}
-                  >
-                    <option value="">Select a client...</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.full_name} ({client.email})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
-
-            {/* Image Upload */}
-            <div className="space-y-2">
-              <Label htmlFor="image" className="font-body">
-                Image
-              </Label>
-              <div className="space-y-4">
-                {imagePreview ? (
-                  <div className="relative">
-                    <div className="relative w-full h-64 border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-                      <Image
-                        src={imagePreview}
-                        alt="Preview"
-                        fill
-                        className="object-cover"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleRemoveImage}
-                        className="absolute top-2 right-2"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-4">
-                    <Input
-                      id="image"
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      onChange={handleImageUpload}
-                      disabled={uploading || isSubmitting}
-                      className="font-body"
-                    />
-                    {uploading && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 font-body">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Uploading...</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <p className="text-xs text-slate-500 font-body">
-                  Upload an image for this post (JPG, PNG, GIF, WEBP - Max 5MB)
-                </p>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="space-y-2">
-              <Label htmlFor="content" className="font-body">
-                Content <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="content"
-                placeholder="Write your post content here..."
-                value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                disabled={isSubmitting}
-                className="font-body min-h-[300px]"
-                required
-              />
-              <p className="text-xs text-slate-500 font-body">
-                Write the full content of your post
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push("/admin/explore")}
-                disabled={isSubmitting}
-                className="font-body"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || uploading}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 font-body"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Update Post
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      </form>
     </div>
   );
 }
-

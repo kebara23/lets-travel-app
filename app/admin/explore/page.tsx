@@ -17,10 +17,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ClientCombobox } from "@/components/ui/client-combobox";
-import { Plus, Trash2, Globe, Lock, Copy } from "lucide-react";
+import { Plus, Trash2, Globe, Lock, Copy, Edit } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ExploreAdminPage() {
+  const router = useRouter();
   const [posts, setPosts] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,6 +172,15 @@ export default function ExploreAdminPage() {
               Duplicate to Client
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/admin/explore/${post.id}`)}
+            className="text-blue-600 hover:text-blue-800 font-body hover:bg-blue-50"
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Edit
+          </Button>
           <Button
             variant="ghost"
             size="sm"
