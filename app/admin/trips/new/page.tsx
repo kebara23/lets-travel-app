@@ -106,7 +106,8 @@ export default function NewTripPage() {
       // Preparar datos para insertar
       const formData = {
         title: title.trim(),
-        user_id: clientId,
+        // Send null if it's the template placeholder, otherwise the client ID
+        user_id: clientId === "00000000-0000-0000-0000-000000000000" ? null : clientId,
         start_date: startDate,
         end_date: endDate,
         status: status,

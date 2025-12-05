@@ -207,10 +207,10 @@ export default function TripsManagerPage() {
 
       if (itemsError) throw itemsError;
 
-      // Create new trip - use OPEN as default if original was OPEN, otherwise keep same client
+      // Create new trip - use OPEN (null) as default if original was OPEN, otherwise keep same client
       // User can change it in the editor
-      const newUserId = tripData.user_id === OPEN_CLIENT_ID 
-        ? OPEN_CLIENT_ID 
+      const newUserId = (tripData.user_id === OPEN_CLIENT_ID || tripData.user_id === null)
+        ? null 
         : tripData.user_id; // Keep original client, user can change in editor
 
       const { data: newTrip, error: insertError } = await supabase
