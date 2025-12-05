@@ -73,20 +73,26 @@ export function Sidebar() {
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error("Error signing out:", error);
+        // Continue to redirect even if there's an error
+      }
 
       toast({
         title: "Signed out",
         description: "You have been successfully signed out.",
       });
-
-      router.push("/login");
     } catch (error) {
+      console.error("Unexpected error signing out:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to sign out. Please try again.",
+        description: "An error occurred while signing out, but we are redirecting you.",
       });
+    } finally {
+      // Always redirect to login, even if there was an error
+      router.push("/login");
+      router.refresh();
     }
   };
 
@@ -136,6 +142,7 @@ export function Sidebar() {
           </div>
         </div>
         <Button
+          type="button"
           variant="ghost"
           onClick={handleLogout}
           className="w-full justify-start gap-3 text-slate-300 hover:bg-slate-800 hover:text-white font-body"

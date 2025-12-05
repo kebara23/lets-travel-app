@@ -516,6 +516,7 @@ export default function DashboardPage() {
               </AvatarFallback>
             </Avatar>
             <Button
+              type="button"
               variant="ghost"
               onClick={handleSignOut}
               className="flex items-center gap-2"
