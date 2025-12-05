@@ -162,8 +162,8 @@ export default function AdminDashboard() {
     try {
       console.log("📊 Fetching recent activity...");
       
-      // Explicitly select all fields including new metadata fields
-      const { data, error } = await supabase
+      // First, get notifications with all fields
+      const { data: notifications, error } = await supabase
         .from("notifications")
         .select(`
           id,
@@ -176,7 +176,8 @@ export default function AdminDashboard() {
           actor_name,
           target_user_name,
           resource_id,
-          resource_type
+          resource_type,
+          user_id
         `)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -188,32 +189,84 @@ export default function AdminDashboard() {
         console.error("   Error Details:", error.details);
         console.error("   Error Hint:", error.hint);
         
-        // NO romper la página: establecer array vacío
         setRecentActivity([]);
         return;
       }
 
-      // Validar que los datos sean un array válido
-      if (!Array.isArray(data)) {
-        console.warn("⚠️ Notifications data is not an array:", data);
+      if (!Array.isArray(notifications)) {
+        console.warn("⚠️ Notifications data is not an array:", notifications);
         setRecentActivity([]);
         return;
       }
 
-      // Debug: Log the actual data structure
-      console.log("✅ Recent activity loaded:", data.length, "items");
-      console.log("📋 Sample activity data:", data[0] ? {
-        id: data[0].id,
-        type: data[0].type,
-        actor_name: data[0].actor_name,
-        target_user_name: data[0].target_user_name,
-        resource_id: data[0].resource_id,
-        resource_type: data[0].resource_type,
-        entity_type: data[0].entity_type,
-        entity_id: data[0].entity_id,
+      // Enrich notifications with user names if missing
+      const enrichedNotifications = await Promise.all(
+        notifications.map(async (notification) => {
+          let actorName = notification.actor_name;
+          let targetName = notification.target_user_name;
+
+          // If actor_name is missing, try to get it from the current session (admin)
+          if (!actorName) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) {
+              const { data: adminUser } = await supabase
+                .from("users")
+                .select("full_name")
+                .eq("id", session.user.id)
+                .single();
+              actorName = adminUser?.full_name || "Admin";
+            }
+          }
+
+          // If target_user_name is missing and we have resource_id for CLIENT, fetch it
+          if (!targetName && notification.resource_type === "CLIENT" && notification.resource_id) {
+            const { data: clientUser } = await supabase
+              .from("users")
+              .select("full_name")
+              .eq("id", notification.resource_id)
+              .single();
+            targetName = clientUser?.full_name || null;
+          }
+
+          // If target_user_name is missing and we have entity_id for CLIENT, fetch it
+          if (!targetName && notification.entity_type?.includes("CLIENT") && notification.entity_id) {
+            const { data: clientUser } = await supabase
+              .from("users")
+              .select("full_name")
+              .eq("id", notification.entity_id)
+              .single();
+            targetName = clientUser?.full_name || null;
+          }
+
+          // If target_user_name is missing and we have user_id (notification recipient), fetch it
+          if (!targetName && notification.user_id) {
+            const { data: targetUser } = await supabase
+              .from("users")
+              .select("full_name")
+              .eq("id", notification.user_id)
+              .single();
+            targetName = targetUser?.full_name || null;
+          }
+
+          return {
+            ...notification,
+            actor_name: actorName || "Admin",
+            target_user_name: targetName || "Cliente",
+          };
+        })
+      );
+
+      console.log("✅ Recent activity loaded:", enrichedNotifications.length, "items");
+      console.log("📋 Sample enriched activity data:", enrichedNotifications[0] ? {
+        id: enrichedNotifications[0].id,
+        type: enrichedNotifications[0].type,
+        actor_name: enrichedNotifications[0].actor_name,
+        target_user_name: enrichedNotifications[0].target_user_name,
+        resource_id: enrichedNotifications[0].resource_id,
+        resource_type: enrichedNotifications[0].resource_type,
       } : "No data");
       
-      setRecentActivity(data);
+      setRecentActivity(enrichedNotifications);
     } catch (error: any) {
       console.error("💥 ERROR DASHBOARD (Exception in fetchRecentActivity):", error);
       console.error("   Error Type:", error?.constructor?.name);
@@ -548,69 +601,117 @@ export default function AdminDashboard() {
                   isClickable
                 });
 
+                // Determine the actual redirect path with fallback logic
+                const getActualPath = (): string => {
+                  // Priority 1: Use resource_type and resource_id
+                  if (activity.resource_type && activity.resource_id) {
+                    const rt = activity.resource_type.toUpperCase();
+                    switch (rt) {
+                      case "TRIP":
+                        return `/admin/trips/${activity.resource_id}`;
+                      case "CLIENT":
+                        return `/admin/clients/${activity.resource_id}`;
+                      case "SOS":
+                        return `/admin/sos/${activity.resource_id}`;
+                      case "MESSAGE":
+                        return `/admin/messages?chatId=${activity.resource_id}`;
+                      default:
+                        break;
+                    }
+                  }
+
+                  // Priority 2: Use entity_type and entity_id
+                  if (activity.entity_type && activity.entity_id) {
+                    const et = activity.entity_type.toUpperCase();
+                    if (et.includes("TRIP")) return `/admin/trips/${activity.entity_id}`;
+                    if (et.includes("CLIENT")) return `/admin/clients/${activity.entity_id}`;
+                    if (et.includes("SOS")) return `/admin/sos/${activity.entity_id}`;
+                    if (et.includes("MESSAGE")) return `/admin/messages?chatId=${activity.entity_id}`;
+                  }
+
+                  // Priority 3: Use type and resource_id/entity_id
+                  const type = (activity.type || "").toUpperCase();
+                  const id = activity.resource_id || activity.entity_id;
+                  if (id) {
+                    if (type.includes("TRIP") || type.includes("ITINERARY")) {
+                      return `/admin/trips/${id}`;
+                    }
+                    if (type.includes("CLIENT")) {
+                      return `/admin/clients/${id}`;
+                    }
+                    if (type.includes("SOS")) {
+                      return `/admin/sos/${id}`;
+                    }
+                    if (type.includes("MESSAGE")) {
+                      return `/admin/messages?chatId=${id}`;
+                    }
+                  }
+
+                  return "#";
+                };
+
+                const actualPath = getActualPath();
+                const canNavigate = actualPath !== "#";
+
                 return (
-                  <button
+                  <div
                     key={activity.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       
-                      // CRITICAL DEBUG: Log everything about the click
-                      console.log("🖱️ Clicking activity:", {
+                      console.log("🖱️ CLICK DETECTED on activity:", {
                         activityId: activity.id,
                         activityType: activity.type,
                         resourceType: activity.resource_type,
                         resourceId: activity.resource_id,
                         entityType: activity.entity_type,
                         entityId: activity.entity_id,
-                        linkUrl,
-                        isClickable
+                        actualPath,
+                        canNavigate
                       });
 
-                      // Handle redirection with switch statement
-                      if (!isClickable || linkUrl === "#") {
-                        // Check if we have resource_id but linkUrl is still "#"
-                        if (activity.resource_id) {
-                          console.log("⚠️ Have resource_id but linkUrl is #, attempting manual routing");
-                          const resourceType = (activity.resource_type || activity.entity_type || activity.type || "").toUpperCase();
-                          
-                          let manualPath = "#";
-                          if (resourceType.includes("TRIP")) {
-                            manualPath = `/admin/trips/${activity.resource_id}`;
-                          } else if (resourceType.includes("CLIENT")) {
-                            manualPath = `/admin/clients/${activity.resource_id}`;
-                          } else if (resourceType.includes("SOS")) {
-                            manualPath = `/admin/sos/${activity.resource_id}`;
-                          } else if (resourceType.includes("MESSAGE")) {
-                            manualPath = `/admin/messages?chatId=${activity.resource_id}`;
-                          }
-                          
-                          if (manualPath !== "#") {
-                            console.log("✅ Using manual path:", manualPath);
-                            router.push(manualPath);
-                            return;
-                          }
-                        }
-                        
+                      if (!canNavigate) {
+                        console.warn("⚠️ Cannot navigate - no valid path");
                         alert(`Error: No Resource ID found for this activity.\n\nActivity ID: ${activity.id}\nType: ${activity.type || activity.resource_type || "Unknown"}\nResource ID: ${activity.resource_id || activity.entity_id || "Missing"}`);
                         return;
                       }
 
-                      console.log("✅ Navigating to:", linkUrl);
-                      router.push(linkUrl);
+                      console.log("✅ Navigating to:", actualPath);
+                      
+                      // Try router.push first, with window.location fallback
+                      try {
+                        router.push(actualPath);
+                        // Fallback: if router.push doesn't work, use window.location after a short delay
+                        setTimeout(() => {
+                          if (window.location.pathname.includes("/admin") && !window.location.pathname.includes(actualPath.split("?")[0])) {
+                            console.log("⚠️ router.push may have failed, using window.location.href");
+                            window.location.href = actualPath;
+                          }
+                        }, 300);
+                      } catch (error) {
+                        console.error("❌ Error with router.push:", error);
+                        window.location.href = actualPath;
+                      }
                     }}
-                    disabled={!isClickable}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLElement).click();
+                      }
+                    }}
                     className={cn(
                       "w-full text-left",
                       "flex items-start gap-3",
                       "rounded-lg border border-slate-200",
                       "px-4 py-3",
-                      "transition-colors",
+                      "transition-all",
                       "min-h-[48px]",
                       "relative z-10",
-                      "touch-manipulation", // Mobile optimization
-                      isClickable
+                      "touch-manipulation",
+                      canNavigate
                         ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 group"
                         : "cursor-default opacity-60"
                     )}
