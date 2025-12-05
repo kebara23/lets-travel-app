@@ -68,7 +68,7 @@ export default function LoginPage() {
   }, [toast]);
 
   // Check if user is already logged in (non-blocking)
-  // Add a small delay to allow signOut to complete if user was just logged out
+  // Use getUser() instead of getSession() to verify the session is actually valid
   useEffect(() => {
     if (!supabase) return;
 
@@ -77,18 +77,26 @@ export default function LoginPage() {
 
     async function checkSession() {
       try {
-        // Small delay to allow signOut to complete if user was just logged out
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay to allow signOut to complete if user was just logged out
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         if (!isMounted) return;
         
+        // Use getUser() instead of getSession() to verify the session is actually valid
+        // getSession() can return a cached session that's no longer valid
         const {
-          data: { session },
-        } = await currentSupabase.auth.getSession();
+          data: { user },
+          error: userError,
+        } = await currentSupabase.auth.getUser();
 
-        if (isMounted && session) {
+        // Only redirect if we have a valid user (no error) and the component is still mounted
+        if (isMounted && user && !userError) {
+          console.log("✅ Valid session found, redirecting to dashboard");
           // User is already logged in, redirect to dashboard
           router.push("/dashboard");
+        } else if (userError) {
+          console.log("ℹ️ No valid session found, showing login form");
+          // No valid session, show login form (this is the expected state)
         }
       } catch (error) {
         // If there's an error checking session, just show the login form
