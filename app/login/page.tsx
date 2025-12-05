@@ -35,10 +35,18 @@ export default function LoginPage() {
 
   // Initialize Supabase client only on client side
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    
     let isMounted = true;
     
     try {
       const client = createClient();
+      
+      // Verify client is properly initialized
+      if (!client) {
+        throw new Error("Failed to create Supabase client");
+      }
+      
       if (isMounted) {
         setSupabase(client);
       }
@@ -56,7 +64,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, []); // Removed toast dependency to prevent re-renders
+  }, [toast]);
 
   // Check if user is already logged in (non-blocking)
   useEffect(() => {
@@ -98,22 +106,95 @@ export default function LoginPage() {
     },
   });
 
+  // Validate form before submission
+  const validateForm = (data: LoginFormValues): boolean => {
+    if (!data.email || !data.email.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter your email address.",
+      });
+      return false;
+    }
+
+    if (!data.password || !data.password.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter your password.",
+      });
+      return false;
+    }
+
+    if (data.password.length < 6) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long.",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
   async function onSubmit(data: LoginFormValues) {
-    if (!supabase) return;
+    // Validate form data
+    if (!validateForm(data)) {
+      return;
+    }
+
+    if (!supabase) {
+      toast({
+        variant: "destructive",
+        title: "Configuration Error",
+        description: "Supabase client is not initialized. Please refresh the page.",
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.email,
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: data.email.trim().toLowerCase(),
         password: data.password,
       });
 
       if (error) {
+        console.error("Login error:", error);
+        
+        // Provide more specific error messages
+        let errorMessage = "Invalid email or password. Please try again.";
+        
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Please check your credentials and try again.";
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Please verify your email address before signing in.";
+        } else if (error.message.includes("Too many requests")) {
+          errorMessage = "Too many login attempts. Please wait a moment and try again.";
+        } else if (error.status === 400) {
+          errorMessage = "Invalid request. Please check your email and password format.";
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+        
         toast({
           variant: "destructive",
           title: "Authentication failed",
-          description: error.message || "Invalid email or password. Please try again.",
+          description: errorMessage,
         });
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if we got a session
+      if (!authData?.session) {
+        toast({
+          variant: "destructive",
+          title: "Authentication failed",
+          description: "No session was created. Please try again.",
+        });
+        setIsLoading(false);
         return;
       }
 
