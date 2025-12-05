@@ -411,26 +411,26 @@ export default function DashboardPage() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to sign out. Please try again.",
-        });
-        return;
+        console.error("Error signing out:", error);
+        // We continue to redirect even if there's an error
+        // This prevents users from being stuck if the session is already invalid
       }
 
       toast({
         title: "Signed out",
-        description: "You have been successfully signed out.",
+        description: "You have been signed out.",
       });
-
-      router.push("/login");
     } catch (error) {
+      console.error("Unexpected error signing out:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "An error occurred. Please try again.",
+        description: "An error occurred while signing out, but we are redirecting you.",
       });
+    } finally {
+      // Always redirect to login
+      router.push("/login");
+      router.refresh();
     }
   }
 
