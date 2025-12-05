@@ -211,14 +211,27 @@ export default function LoginPage() {
       }
 
       // Get current user to check role
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      if (!user) {
+      if (userError) {
+        console.error("❌ Error getting user:", userError);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to get user information.",
+          description: "Failed to get user information. Please try again.",
         });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!user) {
+        console.error("❌ No user returned from getUser()");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to get user information. Please try again.",
+        });
+        setIsLoading(false);
         return;
       }
 
@@ -305,22 +318,37 @@ export default function LoginPage() {
       });
 
       // Redirect based on role (DB check OR email failsafe)
-      if (isAdmin) {
-        console.log("➡️ REDIRIGIENDO A /admin");
-        console.log("   Razón:", dbIsAdmin ? "Rol 'admin' en BD" : "Email contiene 'admin' (failsafe)");
-        router.push("/admin");
-      } else {
-        console.log("➡️ REDIRIGIENDO A /dashboard (Cliente)");
-        console.log("   Razón: profile?.role =", profile?.role, "| Email admin =", emailIsAdmin);
-        router.push("/dashboard");
+      const redirectPath = isAdmin ? "/admin" : "/dashboard";
+      console.log("➡️ REDIRIGIENDO A", redirectPath);
+      console.log("   Razón:", isAdmin 
+        ? (dbIsAdmin ? "Rol 'admin' en BD" : "Email contiene 'admin' (failsafe)")
+        : `Cliente (profile?.role = ${profile?.role})`
+      );
+      
+      // Use window.location as fallback for mobile compatibility
+      try {
+        router.push(redirectPath);
+        // Fallback: if router.push doesn't work, use window.location after a short delay
+        setTimeout(() => {
+          if (window.location.pathname === "/login") {
+            console.log("⚠️ router.push no funcionó, usando window.location.href");
+            window.location.href = redirectPath;
+          }
+        }, 500);
+      } catch (redirectError) {
+        console.error("❌ Error en router.push:", redirectError);
+        // Fallback to window.location
+        window.location.href = redirectPath;
       }
+      
+      setIsLoading(false);
     } catch (error) {
+      console.error("💥 EXCEPTION en onSubmit:", error);
       toast({
         variant: "destructive",
         title: "An error occurred",
-        description: "Something went wrong. Please try again later.",
+        description: error instanceof Error ? error.message : "Something went wrong. Please try again later.",
       });
-    } finally {
       setIsLoading(false);
     }
   }
