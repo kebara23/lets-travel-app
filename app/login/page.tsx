@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -335,9 +336,9 @@ export default function LoginPage() {
       </div>
 
       {/* Right Side: Form Container */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 lg:p-8 bg-background min-h-screen">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 lg:p-8 bg-background min-h-screen pb-24 lg:pb-8">
         {/* Mobile: Card with shadow and border */}
-        <Card className="w-full max-w-md lg:shadow-none lg:border-0 lg:bg-transparent shadow-xl border-luxury/20 bg-card">
+        <Card className="w-full max-w-md lg:shadow-none lg:border-0 lg:bg-transparent shadow-xl border-luxury/20 bg-card relative z-0">
           <CardHeader className="space-y-1 text-center lg:text-left">
             <CardTitle className="font-heading text-4xl lg:text-5xl text-primary mb-2">
               Welcome back
@@ -389,8 +390,23 @@ export default function LoginPage() {
                 />
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-110 transition-all duration-200 font-body"
+                  className={cn(
+                    "w-full h-12 min-h-[48px]",
+                    "bg-primary text-primary-foreground",
+                    "hover:bg-primary/90 active:bg-primary/80",
+                    "transition-all duration-200",
+                    "font-body font-semibold",
+                    "touch-manipulation", // Optimize touch handling
+                    "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  )}
                   disabled={isLoading}
+                  onClick={(e) => {
+                    // Ensure form submission works on mobile
+                    if (!form.formState.isValid) {
+                      e.preventDefault();
+                      form.handleSubmit(onSubmit)();
+                    }
+                  }}
                 >
                   {isLoading ? "Signing in..." : "Sign in"}
                 </Button>
