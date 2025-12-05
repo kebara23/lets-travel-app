@@ -8,7 +8,17 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // 2. Redirección Maestra (Nuevo)
+  // 2. Permitir imágenes de dominios externos (Supabase, etc.)
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**", // Permitir todas las fuentes por ahora para evitar bloqueos
+      },
+    ],
+  },
+
+  // 3. Redirección Maestra
   // Esto dice: "Si alguien entra a la raíz (/), mándalo a /login inmediatamente"
   async redirects() {
     return [
@@ -22,4 +32,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-// Force deploy)
