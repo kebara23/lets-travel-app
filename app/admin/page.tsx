@@ -727,7 +727,7 @@ export default function AdminDashboard() {
                         <span className="font-bold">{resourceLabel}</span>{" "}
                         <span className="font-normal">para</span>{" "}
                         <span className="font-bold">{targetName}</span>
-                        {isClickable && (
+                        {canNavigate && (
                           <ExternalLink className="h-3 w-3 ml-2 inline-block opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
                         )}
                       </div>
@@ -740,7 +740,7 @@ export default function AdminDashboard() {
                         {formatTimeAgo(activity.created_at)}
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
