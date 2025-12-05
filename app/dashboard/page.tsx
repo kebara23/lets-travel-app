@@ -100,13 +100,6 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error("Failed to initialize Supabase client:", error);
-      if (isMounted) {
-        toast({
-          variant: "destructive",
-          title: "Configuration Error",
-          description: error instanceof Error ? error.message : "Supabase is not configured. Please check your environment variables.",
-        });
-      }
     }
 
     return () => {
@@ -196,41 +189,24 @@ export default function DashboardPage() {
         }
       } else {
         console.log("Trip loaded:", data);
+        setTrip(data as Trip);
         
-        // Transform data to handle Supabase relation format
-        const transformedTrip: Trip = {
-          ...data,
-          itinerary_items: Array.isArray(data.itinerary_items) 
-            ? data.itinerary_items 
-            : data.itinerary_items 
-              ? [data.itinerary_items] 
-              : [],
-        };
-        
-        setTrip(transformedTrip);
-        
-        // Find next activity
-        if (transformedTrip.itinerary_items && transformedTrip.itinerary_items.length > 0) {
-          console.log("📋 Processing", transformedTrip.itinerary_items.length, "itinerary items");
-          const next = getNextActivity(transformedTrip.itinerary_items);
+        // Calculate next activity
+        if (data.itinerary_items && data.itinerary_items.length > 0) {
+          const next = getNextActivity(data.itinerary_items as ItineraryItem[]);
           if (next) {
-            console.log("✅ Next Activity Found:", next.item.title, next.date);
             setNextActivity(next.item);
             setNextActivityDate(next.date);
-          } else {
-            console.log("❌ No next activity found");
-            setNextActivity(null);
-            setNextActivityDate(null);
           }
-        } else {
-          console.log("❌ No itinerary items to process");
-          setNextActivity(null);
-          setNextActivityDate(null);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Exception fetching trip:", error);
-      setTrip(null);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load trip information.",
+      });
     } finally {
       setTripLoading(false);
     }
@@ -239,82 +215,21 @@ export default function DashboardPage() {
   // Find next activity from itinerary items
   function getNextActivity(items: ItineraryItem[]): { item: ItineraryItem; date: Date } | null {
     const now = new Date();
-    now.setSeconds(0, 0); // Normalize to minute precision
-    const upcoming: Array<{ item: ItineraryItem; date: Date }> = [];
+    const upcoming: { item: ItineraryItem; date: Date }[] = [];
 
-    console.log("🔍 Finding next activity from", items.length, "items");
-
-    // Process each item
     for (const item of items) {
-      // Skip completed or missing data
-      if (item.is_completed) {
-        console.log("⏭️ Skipping completed item:", item.title);
-        continue;
-      }
+      if (item.is_completed) continue;
 
-      if (!item.day_date || !item.start_time) {
-        console.log("⏭️ Skipping item with missing date/time:", item.title, {
-          day_date: item.day_date,
-          start_time: item.start_time,
-        });
-        continue;
-      }
+      const [hours, minutes] = item.start_time.split(":").map(Number);
+      const activityDate = new Date(item.day_date);
+      activityDate.setHours(hours, minutes, 0, 0);
 
-      try {
-        // Parse day_date (expected format: YYYY-MM-DD)
-        const dateParts = item.day_date.split("-");
-        if (dateParts.length !== 3) {
-          console.error("❌ Invalid day_date format:", item.day_date);
-          continue;
-        }
-
-        // Parse start_time (expected format: HH:mm or HH:mm:ss)
-        const timeParts = item.start_time.split(":");
-        if (timeParts.length < 2) {
-          console.error("❌ Invalid start_time format:", item.start_time);
-          continue;
-        }
-
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-        const day = parseInt(dateParts[2], 10);
-        const hours = parseInt(timeParts[0], 10);
-        const minutes = parseInt(timeParts[1], 10) || 0;
-
-        // Create Date object with explicit values
-        const activityDate = new Date(year, month, day, hours, minutes, 0, 0);
-
-        // Validate the date
-        if (isNaN(activityDate.getTime())) {
-          console.error("❌ Invalid date created:", {
-            year,
-            month,
-            day,
-            hours,
-            minutes,
-          });
-          continue;
-        }
-
-        console.log("📅 Activity:", item.title, {
-          day_date: item.day_date,
-          start_time: item.start_time,
-          parsedDate: activityDate.toISOString(),
-          isFuture: activityDate > now,
-        });
-
-        // Only include future activities
-        if (activityDate > now) {
-          upcoming.push({ item, date: activityDate });
-        }
-      } catch (error) {
-        console.error("❌ Error parsing date for item:", item.id, item.title, error);
+      if (activityDate > now) {
+        upcoming.push({ item, date: activityDate });
       }
     }
 
-    // Sort by date (ascending) and return the first one
     if (upcoming.length === 0) {
-      console.log("❌ No upcoming activities found");
       return null;
     }
 
@@ -382,7 +297,7 @@ export default function DashboardPage() {
 
       // Show browser notification
       if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(`En 1 hora: ${nextActivity.title}`, {
+        new Notification(`Próximamente: ${nextActivity.title}`, {
           body: `Tu actividad "${nextActivity.title}" comienza en 1 hora.`,
           icon: "/favicon.ico",
         });
@@ -391,7 +306,7 @@ export default function DashboardPage() {
       // Insert notification in Supabase
       const { error } = await supabase.from("notifications").insert({
         user_id: user.id,
-        title: "Actividad Próxima",
+        title: "Próxima Actividad",
         message: `En 1 hora: ${nextActivity.title}`,
         type: "activity_reminder",
         link: "/itinerary",
@@ -429,7 +344,7 @@ export default function DashboardPage() {
         description: "An error occurred while signing out, but we are redirecting you.",
       });
     } finally {
-      // Always redirect to login
+      // Always redirect to login, even if there was an error
       // Use window.location to force a full page reload and clear any cached session state
       window.location.href = "/login";
     }
@@ -438,12 +353,11 @@ export default function DashboardPage() {
   if (loading || tripLoading) {
     return (
       <div className="min-h-screen bg-background p-4 lg:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-64 w-full" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+        <div className="max-w-7xl mx-auto space-y-8">
+          <Skeleton className="h-32 w-full" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-48 w-full" />
             ))}
           </div>
         </div>
@@ -451,11 +365,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
-  const userName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Guest";
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Traveler";
   const userInitials = userName
     .split(" ")
     .map((n) => n[0])
@@ -466,33 +376,33 @@ export default function DashboardPage() {
   const quickActions = [
     {
       title: "My Itinerary",
-      icon: Map,
+      description: "View your travel schedule",
       href: "/itinerary",
-      description: "View your travel plans",
+      icon: Map,
     },
     {
       title: "Documents",
-      icon: FileText,
+      description: "Access your travel documents",
       href: "/documents",
-      description: "Access your documents",
-    },
-    {
-      title: "Insider",
-      icon: Key,
-      href: "/explore",
-      description: "Unlock hidden gems & exclusive upgrades.",
+      icon: FileText,
     },
     {
       title: "Concierge",
-      icon: MessageSquare,
+      description: "Chat with our team",
       href: "/messages",
-      description: "Chat with concierge",
+      icon: MessageSquare,
     },
     {
-      title: "Live Tracker",
-      icon: MapPin,
-      href: "/tracking",
+      title: "Insider Access",
+      description: "Exclusive experiences",
+      href: "/explore",
+      icon: Key,
+    },
+    {
+      title: "Live Tracking",
       description: "Share location for safety",
+      href: "/tracking",
+      icon: MapPin,
     },
   ];
 
@@ -531,193 +441,123 @@ export default function DashboardPage() {
 
         {/* Main Trip Status Card */}
         {trip ? (
-          <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-primary/20 border-primary/20 shadow-lg">
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <CardTitle className="font-heading text-2xl lg:text-3xl text-primary">
+                  <CardTitle className="font-heading text-2xl text-primary">
                     {trip.title}
                   </CardTitle>
-                  <CardDescription className="text-base font-body">
-                    Your luxury adventure awaits
+                  <CardDescription className="font-body">
+                    {new Date(trip.start_date).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}{" "}
+                    -{" "}
+                    {new Date(trip.end_date).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                   </CardDescription>
                 </div>
-                <Badge
-                  className={`text-sm px-3 py-1 ${
-                    trip.status === "active"
-                      ? "bg-green-600 text-white"
-                      : trip.status === "completed"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-500 text-white"
-                  }`}
-                >
-                  {trip.status.charAt(0).toUpperCase() + trip.status.slice(1)}
+                <Badge variant="secondary" className="font-body">
+                  {trip.status}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">
-                    Starts: {new Date(trip.start_date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </span>
-                  <span className="text-muted-foreground">Trip Status</span>
-                </div>
-                <Progress
-                  value={
-                    trip.status === "completed"
-                      ? 100
-                      : trip.status === "active"
-                      ? 50
-                      : 25
-                  }
-                  className="h-2"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Start Date
-                  </p>
-                  <p className="font-semibold text-foreground">
-                    {new Date(trip.start_date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    End Date
-                  </p>
-                  <p className="font-semibold text-foreground">
-                    {new Date(trip.end_date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Duration
-                  </p>
-                  <p className="font-semibold text-foreground">
-                    {Math.ceil(
-                      (new Date(trip.end_date).getTime() -
-                        new Date(trip.start_date).getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    )}{" "}
-                    Days
-                  </p>
-                </div>
-              </div>
-
-              {/* Next Activity Section */}
               {nextActivity && nextActivityDate ? (
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <div className="bg-white rounded-lg p-4 space-y-3 shadow-sm border border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-primary" />
-                      <h3 className="font-heading text-lg font-semibold text-slate-900">
-                        UP NEXT
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-heading text-lg font-semibold text-foreground">
+                        Next Activity
                       </h3>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="font-semibold text-slate-900 font-body text-base">
+                      <p className="font-body text-sm text-muted-foreground">
                         {nextActivity.title}
                       </p>
-                      <p className="text-sm text-slate-600 font-body">
-                        {nextActivityDate.toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: true,
-                        })}
-                      </p>
-                      <NextActivityCountdown targetDate={nextActivityDate} />
-                      <CountdownTimer
-                        targetDate={nextActivityDate}
-                        on24Hours={handle24HourNotification}
-                        on1Hour={handle1HourNotification}
-                      />
                     </div>
+                    <Clock className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <NextActivityCountdown targetDate={nextActivityDate} />
+                    <Progress
+                      value={
+                        ((nextActivityDate.getTime() - new Date().getTime()) /
+                          (24 * 60 * 60 * 1000)) *
+                        100
+                      }
+                      className="h-2"
+                    />
                   </div>
                 </div>
               ) : (
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <p className="text-sm text-slate-500 font-body italic">
-                    No upcoming activities scheduled
-                  </p>
+                <div className="text-center py-8 text-muted-foreground font-body">
+                  No upcoming activities scheduled
                 </div>
               )}
+              <Link href="/itinerary">
+                <Button className="w-full font-body" variant="default">
+                  View Full Itinerary
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         ) : (
-          <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-primary/20 border-primary/20 shadow-lg">
-            <CardContent className="py-12">
-              <div className="text-center space-y-4">
-                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Map className="h-8 w-8 text-primary" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-heading text-2xl text-primary">
-                    No trips planned yet
-                  </h3>
-                  <p className="font-body text-muted-foreground max-w-md mx-auto">
-                    Contact your concierge to plan your next luxury adventure.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => router.push("/messages")} // Changed to real navigation
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Contact Concierge
-                </Button>
-              </div>
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <CardHeader>
+              <CardTitle className="font-heading text-2xl text-primary">
+                No Active Trip
+              </CardTitle>
+              <CardDescription className="font-body">
+                You don&apos;t have an active trip at the moment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground font-body">
+                Contact your travel concierge to plan your next adventure!
+              </p>
             </CardContent>
           </Card>
         )}
 
         {/* Quick Actions Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
-          {quickActions.map((action, index) => {
-            const Icon = action.icon;
-            const content = (
-              <Card
-                className="group cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-luxury/20 hover:border-luxury/40 bg-card h-full"
-                style={{
-                  animationDelay: `${index * 100}ms`,
-                }}
-              >
-                <CardContent className="p-6 flex flex-col items-center justify-center space-y-4 min-h-[160px]">
-                  <div className="p-4 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="h-8 w-8 text-primary" />
-                  </div>
-                  <div className="text-center space-y-1">
-                    <h3 className="font-heading text-lg font-semibold text-foreground">
-                      {action.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground font-body">
-                      {action.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
+        <div>
+          <h2 className="font-heading text-2xl text-foreground mb-6">Quick Actions</h2>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {quickActions.map((action, index) => {
+              const Icon = action.icon;
+              const content = (
+                <Card
+                  key={action.title}
+                  className="h-full transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
+                    <div className="rounded-full bg-primary/10 p-4">
+                      <Icon className="h-8 w-8 text-primary" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <h3 className="font-heading text-lg font-semibold text-foreground">
+                        {action.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground font-body">
+                        {action.description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
 
-            // Logic simplified as we removed the onClick from Concierge action
-            return (
-              <Link key={action.title} href={action.href} className="block h-full">
-                {content}
-              </Link>
-            );
-          })}
+              // Logic simplified as we removed the onClick from Concierge action
+              return (
+                <Link key={action.title} href={action.href} className="block h-full">
+                  {content}
+                </Link>
+              );
+            })}
           
           {/* Review & Reputation Module */}
           <ReviewDialog 
