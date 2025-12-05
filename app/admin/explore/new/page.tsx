@@ -39,22 +39,20 @@ export default function NewPostPage() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `explore-images/${fileName}`;
 
-      // Upload to 'public' bucket (common convention) or check if 'images' exists
-      // Let's try 'public' bucket first, assuming it is configured for public access
-      // Note: You might need to create this bucket in Supabase dashboard if not exists
+      // Upload to 'explore-assets' bucket
+      // 'public' is a reserved name in Supabase
       const { error: uploadError } = await supabase.storage
-        .from('public')
+        .from('explore-assets')
         .upload(filePath, file);
 
       if (uploadError) {
         console.error("Upload error:", uploadError);
-        // If bucket 'public' doesn't exist, you might need to create it via SQL or Dashboard
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('public')
+        .from('explore-assets')
         .getPublicUrl(filePath);
 
       return publicUrl;
@@ -63,7 +61,7 @@ export default function NewPostPage() {
       toast({
         variant: "destructive",
         title: "Upload Error",
-        description: "Failed to upload image. Please check if 'public' bucket exists in Supabase Storage."
+        description: "Failed to upload image. Please ensure 'explore-assets' bucket exists and is public."
       });
       return null;
     }
