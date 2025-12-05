@@ -31,6 +31,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [hasLoggedIn, setHasLoggedIn] = useState(false); // Prevent session check after successful login
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -70,7 +71,14 @@ export default function LoginPage() {
 
   // Check if user is already logged in (non-blocking)
   // Use getUser() instead of getSession() to verify the session is actually valid
+  // Skip this check if user just logged in (hasLoggedIn flag)
   useEffect(() => {
+    // Don't check session if user just logged in
+    if (hasLoggedIn) {
+      setIsCheckingSession(false);
+      return;
+    }
+
     if (!supabase) {
       setIsCheckingSession(false);
       return;
@@ -85,7 +93,7 @@ export default function LoginPage() {
         // Longer delay to allow signOut to complete if user was just logged out
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        if (!isMounted || hasRedirected) return;
+        if (!isMounted || hasRedirected || hasLoggedIn) return;
         
         // Use getUser() instead of getSession() to verify the session is actually valid
         // getSession() can return a cached session that's no longer valid
@@ -95,14 +103,14 @@ export default function LoginPage() {
         } = await currentSupabase.auth.getUser();
 
         // Only redirect if we have a valid user (no error) and the component is still mounted
-        if (isMounted && !hasRedirected && user && !userError) {
+        if (isMounted && !hasRedirected && !hasLoggedIn && user && !userError) {
           console.log("✅ Valid session found, redirecting to dashboard");
           hasRedirected = true;
           setIsCheckingSession(false);
           // User is already logged in, redirect to dashboard
           router.push("/dashboard");
         } else {
-          if (isMounted) {
+          if (isMounted && !hasLoggedIn) {
             console.log("ℹ️ No valid session found, showing login form");
             setIsCheckingSession(false);
             // No valid session, show login form (this is the expected state)
@@ -110,7 +118,7 @@ export default function LoginPage() {
         }
       } catch (error) {
         // If there's an error checking session, just show the login form
-        if (isMounted && !hasRedirected) {
+        if (isMounted && !hasRedirected && !hasLoggedIn) {
           console.error("Error checking session:", error);
           setIsCheckingSession(false);
         }
@@ -122,7 +130,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, [router, supabase]);
+  }, [router, supabase, hasLoggedIn]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -344,23 +352,14 @@ export default function LoginPage() {
         : `Cliente (profile?.role = ${profile?.role})`
       );
       
-      // Use window.location as fallback for mobile compatibility
-      try {
-        router.push(redirectPath);
-        // Fallback: if router.push doesn't work, use window.location after a short delay
-        setTimeout(() => {
-          if (window.location.pathname === "/login") {
-            console.log("⚠️ router.push no funcionó, usando window.location.href");
-            window.location.href = redirectPath;
-          }
-        }, 500);
-      } catch (redirectError) {
-        console.error("❌ Error en router.push:", redirectError);
-        // Fallback to window.location
-        window.location.href = redirectPath;
-      }
-      
+      // Set flag to prevent session check from running after redirect
+      setHasLoggedIn(true);
       setIsLoading(false);
+      
+      // Use window.location.href directly to force full page reload and prevent redirect loops
+      // This ensures the session is properly established before any useEffect runs
+      console.log("🔄 Using window.location.href for reliable redirect");
+      window.location.href = redirectPath;
     } catch (error) {
       console.error("💥 EXCEPTION en onSubmit:", error);
       toast({
