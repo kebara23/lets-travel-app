@@ -411,6 +411,10 @@ export default function LoginPage() {
                     "relative z-10" // Ensure button is above other elements
                   )}
                   disabled={isLoading}
+                  onTouchStart={(e) => {
+                    // Prevent double-tap zoom on mobile
+                    e.currentTarget.style.touchAction = "manipulation";
+                  }}
                   onClick={(e) => {
                     // Debug logging for mobile
                     console.log("📱 Button clicked:", {
@@ -422,18 +426,8 @@ export default function LoginPage() {
                       supabaseReady: !!supabase
                     });
                     
-                    // If form is not valid but has values, try to submit anyway
-                    // This helps with mobile touch events that might not trigger form validation properly
-                    if (!isLoading && supabase) {
-                      const values = form.getValues();
-                      if (values.email && values.password) {
-                        console.log("📱 Attempting direct submission with values");
-                        // Trigger form submission directly
-                        onSubmit(values).catch((error) => {
-                          console.error("📱 Direct submission error:", error);
-                        });
-                      }
-                    }
+                    // Don't prevent default - let the form submit naturally
+                    // The onClick is just for debugging and ensuring the button is clickable
                   }}
                 >
                   {isLoading ? "Signing in..." : "Sign in"}
