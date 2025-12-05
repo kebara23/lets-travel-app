@@ -515,7 +515,7 @@ export default function AdminDashboard() {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [supabase]);
+  }, [supabase, fetchDashboardData]);
 
   const pendingSOS = kpis.find((k) => k.isSOS)?.value || 0;
   const hasSOSAlerts = typeof pendingSOS === "number" && pendingSOS > 0;
