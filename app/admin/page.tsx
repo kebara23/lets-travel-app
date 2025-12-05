@@ -157,43 +157,200 @@ export default function AdminDashboard() {
     }
   }
 
-  // Fetch recent notifications (Tolerante a fallos)
+  // Fetch recent activity from multiple sources (trips, clients, messages, sos)
   async function fetchRecentActivity() {
     try {
-      console.log("📊 Fetching recent activity...");
+      console.log("📊 Fetching recent activity from all sources...");
       
-      // First, get the current admin user ID
+      // Get the current admin user ID and name
       const { data: { session } } = await supabase.auth.getSession();
       const adminId = session?.user?.id;
       
       if (!adminId) {
-        console.warn("⚠️ No admin session found, cannot fetch notifications");
+        console.warn("⚠️ No admin session found");
         setRecentActivity([]);
         return;
       }
+
+      // Get admin name
+      let adminName = "Admin";
+      try {
+        const { data: adminUser } = await supabase
+          .from("users")
+          .select("full_name")
+          .eq("id", adminId)
+          .single();
+        if (adminUser?.full_name) {
+          adminName = adminUser.full_name;
+        }
+      } catch (e) {
+        console.warn("⚠️ Failed to fetch admin name:", e);
+      }
+
+      // Fetch recent activity from multiple sources in parallel
+      const [tripsResult, clientsResult, messagesResult, sosResult] = await Promise.allSettled([
+        // Recent trips (created or updated in last 7 days)
+        supabase
+          .from("trips")
+          .select(`
+            id,
+            title,
+            updated_at,
+            created_at,
+            user_id,
+            users:user_id(full_name)
+          `)
+          .order("updated_at", { ascending: false })
+          .limit(5),
+        
+        // Recent client updates (updated in last 7 days)
+        supabase
+          .from("users")
+          .select(`
+            id,
+            full_name,
+            email,
+            updated_at,
+            created_at
+          `)
+          .eq("role", "client")
+          .order("updated_at", { ascending: false })
+          .limit(5),
+        
+        // Recent messages (last 5)
+        supabase
+          .from("messages")
+          .select(`
+            id,
+            content,
+            created_at,
+            sender_id,
+            users:sender_id(full_name, email)
+          `)
+          .order("created_at", { ascending: false })
+          .limit(5),
+        
+        // Recent SOS alerts
+        supabase
+          .from("sos_alerts")
+          .select(`
+            id,
+            status,
+            created_at,
+            user_id,
+            users:user_id(full_name, email)
+          `)
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
+
+      // Combine all activities into a single array
+      const activities: Notification[] = [];
+
+      // Process trips
+      if (tripsResult.status === "fulfilled" && tripsResult.value.data) {
+        tripsResult.value.data.forEach((trip: any) => {
+          const clientName = trip.users?.full_name || "Cliente";
+          const isNew = new Date(trip.created_at).getTime() === new Date(trip.updated_at).getTime();
+          
+          activities.push({
+            id: `trip-${trip.id}`,
+            type: isNew ? "TRIP_CREATED" : "TRIP_UPDATE",
+            title: isNew ? "Nuevo Viaje Creado" : "Viaje Actualizado",
+            message: isNew 
+              ? `Se creó el viaje "${trip.title}" para ${clientName}`
+              : `Se actualizó el viaje "${trip.title}" para ${clientName}`,
+            created_at: trip.updated_at,
+            entity_type: "TRIP",
+            entity_id: trip.id,
+            actor_name: adminName,
+            target_user_name: clientName,
+            resource_id: trip.id,
+            resource_type: "TRIP",
+          });
+        });
+      }
+
+      // Process client updates
+      if (clientsResult.status === "fulfilled" && clientsResult.value.data) {
+        clientsResult.value.data.forEach((client: any) => {
+          const isNew = new Date(client.created_at).getTime() === new Date(client.updated_at).getTime();
+          
+          activities.push({
+            id: `client-${client.id}`,
+            type: isNew ? "CLIENT_CREATED" : "CLIENT_UPDATE",
+            title: isNew ? "Nuevo Cliente" : "Cliente Actualizado",
+            message: isNew
+              ? `Se creó el perfil de ${client.full_name}`
+              : `Se actualizó el perfil de ${client.full_name}`,
+            created_at: client.updated_at,
+            entity_type: "CLIENT",
+            entity_id: client.id,
+            actor_name: adminName,
+            target_user_name: client.full_name,
+            resource_id: client.id,
+            resource_type: "CLIENT",
+          });
+        });
+      }
+
+      // Process messages
+      if (messagesResult.status === "fulfilled" && messagesResult.value.data) {
+        messagesResult.value.data.forEach((message: any) => {
+          const senderName = message.users?.full_name || message.users?.email || "Usuario";
+          
+          activities.push({
+            id: `message-${message.id}`,
+            type: "NEW_MESSAGE",
+            title: "Nuevo Mensaje",
+            message: message.content?.substring(0, 50) || "Nuevo mensaje recibido",
+            created_at: message.created_at,
+            entity_type: "MESSAGE",
+            entity_id: message.id,
+            actor_name: senderName,
+            target_user_name: adminName,
+            resource_id: message.sender_id,
+            resource_type: "MESSAGE",
+          });
+        });
+      }
+
+      // Process SOS alerts
+      if (sosResult.status === "fulfilled" && sosResult.value.data) {
+        sosResult.value.data.forEach((alert: any) => {
+          const clientName = alert.users?.full_name || alert.users?.email || "Cliente";
+          
+          activities.push({
+            id: `sos-${alert.id}`,
+            type: "NEW_SOS",
+            title: "Alerta SOS",
+            message: `Alerta SOS de ${clientName} - Estado: ${alert.status}`,
+            created_at: alert.created_at,
+            entity_type: "SOS",
+            entity_id: alert.id,
+            actor_name: clientName,
+            target_user_name: adminName,
+            resource_id: alert.id,
+            resource_type: "SOS",
+          });
+        });
+      }
+
+      // Sort by created_at (most recent first) and limit to 5
+      activities.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
       
-      console.log("📊 Admin ID:", adminId);
+      const recentActivities = activities.slice(0, 5);
+
+      console.log("✅ Recent activity loaded:", recentActivities.length, "items");
+      console.log("📋 Activities:", recentActivities.map(a => ({
+        type: a.type,
+        title: a.title,
+        target: a.target_user_name
+      })));
       
-      // Get notifications for the current admin user
-      const { data: notifications, error } = await supabase
-        .from("notifications")
-        .select(`
-          id,
-          type,
-          title,
-          message,
-          created_at,
-          entity_type,
-          entity_id,
-          actor_name,
-          target_user_name,
-          resource_id,
-          resource_type,
-          user_id
-        `)
-        .eq("user_id", adminId) // CRITICAL: Filter by admin user_id
-        .order("created_at", { ascending: false })
-        .limit(5);
+      setRecentActivity(recentActivities);
 
       if (error) {
         console.error("❌ ERROR DASHBOARD (Notifications Query):", error);
