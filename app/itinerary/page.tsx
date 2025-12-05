@@ -4,13 +4,19 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown } from "lucide-react";
 import { TimelineItem } from "@/components/features/itinerary/TimelineItem";
 import { DaySelector } from "@/components/features/itinerary/DaySelector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import type { ItineraryItem as HookItineraryItem } from "@/hooks/useItinerary";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Tipo que coincide con el esquema de la base de datos
 type ItineraryItemDB = {
@@ -39,15 +45,24 @@ export default function ItineraryPage() {
   const { toast } = useToast();
   const supabase = createClient();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [trip, setTrip] = useState<Trip | null>(null);
+  
+  // State for multiple trips
+  const [allTrips, setAllTrips] = useState<Trip[]>([]);
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Consulta exacta según el esquema de la base de datos
+  // Derived current trip based on selection
+  const trip = useMemo(() => {
+    return allTrips.find(t => t.id === selectedTripId) || null;
+  }, [allTrips, selectedTripId]);
+
+  // Fetch all active trips
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchTrip() {
+    async function fetchTrips() {
       try {
         setLoading(true);
 
@@ -60,8 +75,8 @@ export default function ItineraryPage() {
           return;
         }
 
-        // REQUISITO: Query exacta con relación anidada
-        const { data: tripData, error: tripError } = await supabase
+        // Modified query to fetch ALL active trips, not just one
+        const { data: tripsData, error: tripsError } = await supabase
           .from('trips')
           .select(`
             id, title, start_date, end_date, status,
@@ -73,32 +88,34 @@ export default function ItineraryPage() {
           `)
           .eq('status', 'active')
           .eq('user_id', session.user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+          .order('created_at', { ascending: false }); // Most recently created first
 
         if (!isMounted) return;
 
-        if (tripError) {
-          if (tripError.code === "PGRST116") {
-            // No active trips found
-            setTrip(null);
-          } else {
-            console.error("Error fetching trip:", tripError);
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: tripError.message || "Failed to load itinerary details.",
-            });
-            setTrip(null);
+        if (tripsError) {
+          console.error("Error fetching trips:", tripsError);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: tripsError.message || "Failed to load itinerary details.",
+          });
+          setAllTrips([]);
+        } else if (tripsData && tripsData.length > 0) {
+          // Store all trips
+          const typedTrips = tripsData as Trip[];
+          setAllTrips(typedTrips);
+          
+          // Select the first trip by default (most recent due to sort order)
+          if (!selectedTripId) {
+            setSelectedTripId(typedTrips[0].id);
           }
-        } else if (tripData) {
-          setTrip(tripData as Trip);
+        } else {
+          setAllTrips([]);
         }
       } catch (error: unknown) {
         if (isMounted) {
           const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
-          console.error("Exception fetching trip:", error);
+          console.error("Exception fetching trips:", error);
           toast({
             variant: "destructive",
             title: "Unexpected Error",
@@ -112,14 +129,19 @@ export default function ItineraryPage() {
       }
     }
 
-    fetchTrip();
+    fetchTrips();
 
     return () => {
       isMounted = false;
     };
   }, [supabase, toast, router]);
 
-  // Mapear items de DB a formato esperado por TimelineItem
+  // Reset selected day when trip changes
+  useEffect(() => {
+    setSelectedDay(null);
+  }, [selectedTripId]);
+
+  // Map DB items to UI format
   const mappedItems: HookItineraryItem[] = useMemo(() => {
     if (!trip?.itinerary_items) return [];
 
@@ -127,7 +149,7 @@ export default function ItineraryPage() {
       id: item.id,
       trip_id: trip.id,
       day: item.day,
-      time: item.start_time || "TBD", // Safe fallback for null time
+      time: item.start_time || "TBD",
       title: item.title,
       description: item.description,
       type: item.type as "flight" | "hotel" | "activity" | "food",
@@ -186,7 +208,6 @@ export default function ItineraryPage() {
     const sortedGrouped: Record<number, HookItineraryItem[]> = {};
     sortedDays.forEach((day) => {
       sortedGrouped[day] = grouped[day].sort((a, b) => {
-        // Sort by time within each day - safe comparison
         const timeA = a.time || "";
         const timeB = b.time || "";
         return timeA.localeCompare(timeB);
@@ -199,15 +220,19 @@ export default function ItineraryPage() {
   const handleToggleComplete = async (id: string, is_completed: boolean) => {
     setIsUpdating(true);
     
-    // Optimistic update
-    setTrip((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        itinerary_items: prev.itinerary_items.map((item) =>
-          item.id === id ? { ...item, is_completed } : item
-        ),
-      };
+    // Optimistic update within the list of all trips
+    setAllTrips((prevTrips) => {
+      return prevTrips.map(t => {
+        if (t.id === selectedTripId) {
+          return {
+            ...t,
+            itinerary_items: t.itinerary_items.map((item) =>
+              item.id === id ? { ...item, is_completed } : item
+            ),
+          };
+        }
+        return t;
+      });
     });
 
     try {
@@ -217,33 +242,22 @@ export default function ItineraryPage() {
         .eq("id", id);
         
       if (error) {
-        // Revert optimistic update
-        setTrip((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            itinerary_items: prev.itinerary_items.map((item) =>
-              item.id === id ? { ...item, is_completed: !is_completed } : item
-            ),
-          };
-        });
-        console.error("Error updating completion status:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to update status: " + error.message,
-        });
+        throw error;
       }
     } catch (err: unknown) {
       // Revert optimistic update
-      setTrip((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          itinerary_items: prev.itinerary_items.map((item) =>
-            item.id === id ? { ...item, is_completed: !is_completed } : item
-          ),
-        };
+      setAllTrips((prevTrips) => {
+        return prevTrips.map(t => {
+          if (t.id === selectedTripId) {
+            return {
+              ...t,
+              itinerary_items: t.itinerary_items.map((item) =>
+                item.id === id ? { ...item, is_completed: !is_completed } : item
+              ),
+            };
+          }
+          return t;
+        });
       });
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred.";
       console.error("Exception updating completion status:", err);
@@ -279,9 +293,31 @@ export default function ItineraryPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="font-heading text-4xl lg:text-5xl text-primary">
-              {trip?.title || "Your Journey"}
-            </h1>
+            {allTrips.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="p-0 hover:bg-transparent -ml-2 h-auto font-heading text-4xl lg:text-5xl text-primary flex items-center gap-2">
+                    {trip?.title || "Select Trip"}
+                    <ChevronDown className="h-8 w-8 mt-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {allTrips.map((t) => (
+                    <DropdownMenuItem 
+                      key={t.id}
+                      onClick={() => setSelectedTripId(t.id)}
+                      className="font-body cursor-pointer text-base py-2"
+                    >
+                      {t.title}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <h1 className="font-heading text-4xl lg:text-5xl text-primary">
+                {trip?.title || "Your Journey"}
+              </h1>
+            )}
             <p className="font-body text-muted-foreground">
               Track your travel itinerary day by day
             </p>
