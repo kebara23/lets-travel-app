@@ -37,6 +37,11 @@ type Notification = {
   created_at: string;
   entity_type?: string;
   entity_id?: string;
+  // New rich metadata fields
+  actor_name?: string | null;
+  target_user_name?: string | null;
+  resource_id?: string | null;
+  resource_type?: 'TRIP' | 'CLIENT' | 'SOS' | 'MESSAGE' | 'INVOICE' | 'OTHER' | null;
 };
 
 export default function AdminDashboard() {
@@ -479,63 +484,85 @@ export default function AdminDashboard() {
               No recent activity
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-200">
-                  <TableHead className="font-body w-12">Type</TableHead>
-                  <TableHead className="font-body">Title</TableHead>
-                  <TableHead className="font-body">Message</TableHead>
-                  <TableHead className="font-body">Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentActivity.map((activity) => {
-          const Icon = getNotificationIcon(activity.type);
-          // Determine deep link path based on activity payload
-          const linkUrl = getRedirectPath(activity);
-          const isClickable = linkUrl !== "#";
+            <div className="space-y-2">
+              {recentActivity.map((activity) => {
+                const Icon = getNotificationIcon(activity.type);
+                // Determine deep link path based on activity payload
+                const linkUrl = getRedirectPath(activity);
+                const isClickable = linkUrl !== "#";
 
-                  return (
-            <TableRow 
-              key={activity.id} 
-              className={cn(
-                "border-slate-200 transition-colors",
-                isClickable && "hover:bg-slate-50 active:bg-slate-100 cursor-pointer group"
-              )}
-              onClick={(e) => {
-                if (isClickable) {
-                  e.stopPropagation();
-                  console.log("Clicked item:", activity.type, activity.id);
-                  router.push(linkUrl);
-                }
-              }}
-            >
-                      <TableCell>
-                        <div className="flex items-center justify-center">
-                          <Icon className="h-5 w-5 text-slate-600" />
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium font-body">
-                        {isClickable ? (
-                          <span className="flex items-center gap-2 group-hover:text-blue-600 transition-colors">
-                            {activity.title}
-                            <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
-                          </span>
-                        ) : (
-                          activity.title
+                // Build rich text display
+                const actorName = activity.actor_name || "Admin";
+                const targetName = activity.target_user_name || "Cliente";
+                const resourceLabel = (() => {
+                  const rt = activity.resource_type?.toUpperCase();
+                  if (rt === "TRIP") return "Itinerary";
+                  if (rt === "CLIENT") return "Perfil";
+                  if (rt === "SOS") return "SOS";
+                  if (rt === "MESSAGE") return "Mensaje";
+                  if (rt === "INVOICE") return "Factura";
+                  // Fallback to type-based label
+                  if (activity.type?.includes("TRIP") || activity.type?.includes("ITINERARY")) return "Itinerary";
+                  if (activity.type?.includes("CLIENT")) return "Perfil";
+                  if (activity.type?.includes("SOS")) return "SOS";
+                  if (activity.type?.includes("MESSAGE")) return "Mensaje";
+                  return "Item";
+                })();
+
+                return (
+                  <button
+                    key={activity.id}
+                    type="button"
+                    onClick={(e) => {
+                      if (isClickable) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log("Clicked item:", activity.type, activity.id, "->", linkUrl);
+                        router.push(linkUrl);
+                      }
+                    }}
+                    disabled={!isClickable}
+                    className={cn(
+                      "w-full text-left",
+                      "flex items-start gap-3",
+                      "rounded-lg border border-slate-200",
+                      "px-4 py-3",
+                      "transition-colors",
+                      "min-h-[48px]",
+                      "relative z-10",
+                      isClickable
+                        ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                        : "cursor-default opacity-60"
+                    )}
+                    aria-label={`${actorName} actualizó ${resourceLabel} para ${targetName}`}
+                  >
+                    <div className="flex-shrink-0 mt-0.5">
+                      <Icon className="h-5 w-5 text-slate-600" />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="text-sm text-slate-900 font-body">
+                        <span className="font-bold">{actorName}</span>{" "}
+                        <span className="font-normal">actualizó</span>{" "}
+                        <span className="font-bold">{resourceLabel}</span>{" "}
+                        <span className="font-normal">para</span>{" "}
+                        <span className="font-bold">{targetName}</span>
+                        {isClickable && (
+                          <ExternalLink className="h-3 w-3 ml-2 inline-block opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
                         )}
-                      </TableCell>
-                      <TableCell className="font-body text-slate-600">
-                        {activity.message}
-                      </TableCell>
-                      <TableCell className="font-body text-slate-500 text-sm whitespace-nowrap">
+                      </div>
+                      {activity.message && (
+                        <div className="text-xs text-slate-500 font-body line-clamp-2">
+                          {activity.message}
+                        </div>
+                      )}
+                      <div className="text-xs text-slate-400 font-body">
                         {formatTimeAgo(activity.created_at)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>

@@ -4,11 +4,34 @@ import { Plane, Users, MessageCircle, FileText, Bell, AlertTriangle } from "luci
 
 /**
  * Build a deep-link path for recent activity items based on their payload.
+ * Prioritizes resource_type and resource_id, falls back to legacy fields.
  * Falls back to "#" when we cannot resolve a destination.
  */
 export function getRedirectPath(activity: any): string {
   if (!activity) return "#";
 
+  // Priority 1: Use new resource_type and resource_id if available
+  if (activity.resource_type && activity.resource_id) {
+    const resourceType = activity.resource_type.toUpperCase();
+    const resourceId = activity.resource_id;
+
+    switch (resourceType) {
+      case "TRIP":
+        return `/admin/trips/${resourceId}`;
+      case "CLIENT":
+        return `/admin/clients/${resourceId}`;
+      case "SOS":
+        return `/admin/sos/${resourceId}`;
+      case "MESSAGE":
+        return `/admin/inbox?id=${resourceId}`;
+      case "INVOICE":
+        return `/admin/invoices/${resourceId}`;
+      default:
+        break;
+    }
+  }
+
+  // Priority 2: Fallback to legacy event-based routing
   const type = (activity.entity_type || activity.type || "").toUpperCase();
 
   switch (type) {
@@ -24,7 +47,7 @@ export function getRedirectPath(activity: any): string {
         ? `/admin/inbox?conversationId=${activity.conversation_id}`
         : "/admin/messages";
     default:
-      // Fallback to legacy link helper when provided
+      // Priority 3: Fallback to legacy link helper when provided
       if (activity.entity_type || activity.type) {
         return getActivityLink(activity.entity_type || activity.type, activity.entity_id || null);
       }
