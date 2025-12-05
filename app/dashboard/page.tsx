@@ -133,11 +133,11 @@ export default function DashboardPage() {
         }
 
         if (isMounted) {
-          setUser(session.user);
+          setUser(user);
           
           // Fetch all user's active trips
-          if (session.user.id) {
-            await fetchUserTrips(currentSupabase, session.user.id);
+          if (user.id) {
+            await fetchUserTrip(currentSupabase, user.id);
           }
         }
       } catch (error) {
