@@ -408,15 +408,8 @@ export default function SOSCenterPage() {
                     }}
                     aria-label={`View SOS alert from ${alert.users?.full_name || "Unknown User"}`}
                   >
-                      <CardContent 
-                        className="p-4 relative"
-                        onClick={(e) => {
-                          // Ensure click propagates to parent Card
-                          e.stopPropagation();
-                          handleCardClick(e as any);
-                        }}
-                      >
-                        <div className="space-y-2 pointer-events-none">
+                      <CardContent className="p-4 relative">
+                        <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0 pr-2">
                               <h3 className="font-semibold text-slate-900 font-body truncate">
