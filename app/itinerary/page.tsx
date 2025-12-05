@@ -4,14 +4,19 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown } from "lucide-react";
 import { TimelineItem } from "@/components/features/itinerary/TimelineItem";
 import { DaySelector } from "@/components/features/itinerary/DaySelector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import type { ItineraryItem as HookItineraryItem } from "@/hooks/useItinerary";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Tipo que coincide con el esquema de la base de datos
 type ItineraryItemDB = {
@@ -35,20 +40,23 @@ type Trip = {
   itinerary_items: ItineraryItemDB[];
 };
 
-type UnifiedItem = HookItineraryItem & {
-  tripTitle: string;
-  tripId: string;
-  absoluteDay: number; // Día absoluto desde el primer viaje
-};
-
 export default function ItineraryPage() {
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClient();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  
+  // State for multiple trips
   const [allTrips, setAllTrips] = useState<Trip[]>([]);
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Derived current trip based on selection
+  const trip = useMemo(() => {
+    return allTrips.find(t => t.id === selectedTripId) || null;
+  }, [allTrips, selectedTripId]);
 
   // Fetch all active trips
   useEffect(() => {
@@ -67,7 +75,7 @@ export default function ItineraryPage() {
           return;
         }
 
-        // Fetch ALL active trips
+        // Modified query to fetch ALL active trips, not just one
         const { data: tripsData, error: tripsError } = await supabase
           .from('trips')
           .select(`
@@ -78,9 +86,10 @@ export default function ItineraryPage() {
               is_completed, location_data
             )
           `)
-          .eq('status', 'active')
+          // Allow both active and completed trips to appear in history
+          .in('status', ['active', 'completed']) 
           .eq('user_id', session.user.id)
-          .order('start_date', { ascending: true }); // Order by start date, earliest first
+          .order('start_date', { ascending: true }); // Sort by start date to order them chronologically
 
         if (!isMounted) return;
 
@@ -93,7 +102,14 @@ export default function ItineraryPage() {
           });
           setAllTrips([]);
         } else if (tripsData && tripsData.length > 0) {
-          setAllTrips(tripsData as Trip[]);
+          // Store all trips
+          const typedTrips = tripsData as Trip[];
+          setAllTrips(typedTrips);
+          
+          // Select the first trip by default (most recent due to sort order)
+          if (!selectedTripId) {
+            setSelectedTripId(typedTrips[0].id);
+          }
         } else {
           setAllTrips([]);
         }
@@ -121,72 +137,41 @@ export default function ItineraryPage() {
     };
   }, [supabase, toast, router]);
 
-  // Combine all trips into unified timeline
-  const unifiedItems: UnifiedItem[] = useMemo(() => {
-    if (allTrips.length === 0) return [];
+  // Reset selected day when trip changes
+  useEffect(() => {
+    setSelectedDay(null);
+  }, [selectedTripId]);
 
-    // Find the earliest start date across all trips
-    const earliestStartDate = allTrips.reduce((earliest, trip) => {
-      const tripStart = new Date(trip.start_date);
-      return tripStart < earliest ? tripStart : earliest;
-    }, new Date(allTrips[0].start_date));
+  // Map DB items to UI format
+  const mappedItems: HookItineraryItem[] = useMemo(() => {
+    if (!trip?.itinerary_items) return [];
 
-    const unified: UnifiedItem[] = [];
+    return trip.itinerary_items.map((item) => ({
+      id: item.id,
+      trip_id: trip.id,
+      day: item.day,
+      time: item.start_time || "TBD",
+      title: item.title,
+      description: item.description,
+      type: item.type as "flight" | "hotel" | "activity" | "food",
+      location: item.location_data 
+        ? (typeof item.location_data === 'string' 
+            ? item.location_data 
+            : (item.location_data.name as string) || (item.location_data.address as string) || null)
+        : null,
+      is_completed: item.is_completed,
+      created_at: item.day_date || new Date().toISOString(),
+      updated_at: item.day_date || new Date().toISOString(),
+    }));
+  }, [trip]);
 
-    allTrips.forEach((trip) => {
-      const tripStartDate = new Date(trip.start_date);
-      
-      // Calculate offset: how many days after the earliest trip does this trip start?
-      const daysOffset = Math.floor(
-        (tripStartDate.getTime() - earliestStartDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      // Process each item in this trip
-      trip.itinerary_items.forEach((item) => {
-        // Calculate absolute day: offset + relative day within trip
-        const absoluteDay = daysOffset + item.day;
-
-        unified.push({
-          id: item.id,
-          trip_id: trip.id,
-          tripTitle: trip.title,
-          tripId: trip.id,
-          day: absoluteDay, // Use absolute day for unified view
-          absoluteDay: absoluteDay,
-          time: item.start_time || "TBD",
-          title: item.title,
-          description: item.description,
-          type: item.type as "flight" | "hotel" | "activity" | "food",
-          location: item.location_data 
-            ? (typeof item.location_data === 'string' 
-                ? item.location_data 
-                : (item.location_data.name as string) || (item.location_data.address as string) || null)
-            : null,
-          is_completed: item.is_completed,
-          created_at: item.day_date || new Date().toISOString(),
-          updated_at: item.day_date || new Date().toISOString(),
-        });
-      });
-    });
-
-    // Sort by absolute day, then by time
-    return unified.sort((a, b) => {
-      if (a.absoluteDay !== b.absoluteDay) {
-        return a.absoluteDay - b.absoluteDay;
-      }
-      const timeA = a.time || "";
-      const timeB = b.time || "";
-      return timeA.localeCompare(timeB);
-    });
-  }, [allTrips]);
-
-  // Extract unique absolute days
+  // Extract unique days from items
   const days = useMemo(() => {
-    const uniqueDays = Array.from(new Set(unifiedItems.map((item) => item.absoluteDay)))
+    const uniqueDays = Array.from(new Set(mappedItems.map((item) => item.day)))
       .filter((day) => day !== null && day !== undefined)
       .sort((a, b) => a - b);
     return uniqueDays;
-  }, [unifiedItems]);
+  }, [mappedItems]);
 
   // Auto-select first available day
   useEffect(() => {
@@ -198,17 +183,17 @@ export default function ItineraryPage() {
   // Filter items by selected day
   const filteredItems = useMemo(() => {
     if (selectedDay === null) {
-      return unifiedItems;
+      return mappedItems;
     }
-    return unifiedItems.filter((item) => item.absoluteDay === selectedDay);
-  }, [unifiedItems, selectedDay]);
+    return mappedItems.filter((item) => item.day === selectedDay);
+  }, [mappedItems, selectedDay]);
 
-  // Group items by absolute day for display
+  // Group items by day for display
   const itemsByDay = useMemo(() => {
-    const grouped: Record<number, UnifiedItem[]> = {};
+    const grouped: Record<number, HookItineraryItem[]> = {};
 
     filteredItems.forEach((item) => {
-      const day = item.absoluteDay;
+      const day = item.day;
       if (day !== null && day !== undefined) {
         if (!grouped[day]) {
           grouped[day] = [];
@@ -221,7 +206,7 @@ export default function ItineraryPage() {
       .map(Number)
       .sort((a, b) => a - b);
     
-    const sortedGrouped: Record<number, UnifiedItem[]> = {};
+    const sortedGrouped: Record<number, HookItineraryItem[]> = {};
     sortedDays.forEach((day) => {
       sortedGrouped[day] = grouped[day].sort((a, b) => {
         const timeA = a.time || "";
@@ -233,29 +218,17 @@ export default function ItineraryPage() {
     return sortedGrouped;
   }, [filteredItems]);
 
-  // Get trip titles for display (to show which trip each item belongs to)
-  const tripTitles = useMemo(() => {
-    return allTrips.map(t => ({ id: t.id, title: t.title }));
-  }, [allTrips]);
-
   const handleToggleComplete = async (id: string, is_completed: boolean) => {
     setIsUpdating(true);
     
-    // Find which trip this item belongs to
-    const item = unifiedItems.find(i => i.id === id);
-    if (!item) {
-      setIsUpdating(false);
-      return;
-    }
-
-    // Optimistic update
+    // Optimistic update within the list of all trips
     setAllTrips((prevTrips) => {
       return prevTrips.map(t => {
-        if (t.id === item.tripId) {
+        if (t.id === selectedTripId) {
           return {
             ...t,
-            itinerary_items: t.itinerary_items.map((it) =>
-              it.id === id ? { ...it, is_completed } : it
+            itinerary_items: t.itinerary_items.map((item) =>
+              item.id === id ? { ...item, is_completed } : item
             ),
           };
         }
@@ -276,11 +249,11 @@ export default function ItineraryPage() {
       // Revert optimistic update
       setAllTrips((prevTrips) => {
         return prevTrips.map(t => {
-          if (t.id === item.tripId) {
+          if (t.id === selectedTripId) {
             return {
               ...t,
-              itinerary_items: t.itinerary_items.map((it) =>
-                it.id === id ? { ...it, is_completed: !is_completed } : it
+              itinerary_items: t.itinerary_items.map((item) =>
+                item.id === id ? { ...item, is_completed: !is_completed } : item
               ),
             };
           }
@@ -315,30 +288,43 @@ export default function ItineraryPage() {
     );
   }
 
-  // Determine main title (show all trip names if multiple)
-  const mainTitle = allTrips.length === 0 
-    ? "Your Journey"
-    : allTrips.length === 1
-    ? allTrips[0].title
-    : `${allTrips.length} Active Trips`;
-
   return (
     <div className="min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="font-heading text-4xl lg:text-5xl text-primary">
-              {mainTitle}
-            </h1>
-            {allTrips.length > 1 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {allTrips.map((trip) => (
-                  <Badge key={trip.id} variant="outline" className="font-body">
-                    {trip.title}
-                  </Badge>
-                ))}
-              </div>
+            {allTrips.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="p-0 hover:bg-transparent -ml-2 h-auto font-heading text-4xl lg:text-5xl text-primary flex items-center gap-2">
+                    <span className="truncate max-w-[300px] lg:max-w-[600px] text-left">
+                      {trip?.title || "Select Trip"}
+                    </span>
+                    <ChevronDown className="h-8 w-8 mt-1 flex-shrink-0 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-72 max-h-[300px] overflow-y-auto">
+                  {allTrips.map((t) => (
+                    <DropdownMenuItem 
+                      key={t.id}
+                      onClick={() => setSelectedTripId(t.id)}
+                      className="font-body cursor-pointer text-base py-3 px-4 border-b last:border-0 border-slate-100"
+                    >
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">{t.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(t.start_date).toLocaleDateString()} - {new Date(t.end_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <h1 className="font-heading text-4xl lg:text-5xl text-primary">
+                {trip?.title || "Your Journey"}
+              </h1>
             )}
             <p className="font-body text-muted-foreground">
               Track your travel itinerary day by day
@@ -357,7 +343,7 @@ export default function ItineraryPage() {
         <Separator />
 
         {/* Empty State: No Trips */}
-        {allTrips.length === 0 && !loading && (
+        {!trip && !loading && (
           <div className="text-center py-12 space-y-4">
             <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
               <Calendar className="h-8 w-8 text-primary" />
@@ -372,14 +358,15 @@ export default function ItineraryPage() {
               variant="default"
               onClick={() => router.push("/dashboard")}
               className="font-body mt-4 bg-primary text-primary-foreground"
+              type="button"
             >
               Back to Dashboard
             </Button>
           </div>
         )}
 
-        {/* Empty State: Trips exist but no items */}
-        {allTrips.length > 0 && !loading && unifiedItems.length === 0 && (
+        {/* Empty State: Trip exists but no items */}
+        {trip && !loading && mappedItems.length === 0 && (
           <div className="text-center py-12 space-y-4">
             <p className="font-body text-muted-foreground text-lg">
               Your itinerary has no activities yet.
@@ -388,6 +375,7 @@ export default function ItineraryPage() {
               variant="outline"
               onClick={() => router.push("/dashboard")}
               className="font-body"
+              type="button"
             >
               Back to Dashboard
             </Button>
@@ -409,61 +397,35 @@ export default function ItineraryPage() {
           </div>
         )}
 
-        {/* Unified Timeline - Shows all trips combined */}
-        {unifiedItems.length > 0 && (
+        {/* Timeline */}
+        {mappedItems.length > 0 && (
           <div className="space-y-8">
-            {Object.entries(itemsByDay).map(([day, dayItems]) => {
-              // Group items by trip to show trip badges
-              const itemsByTrip = dayItems.reduce((acc, item) => {
-                if (!acc[item.tripId]) {
-                  acc[item.tripId] = [];
-                }
-                acc[item.tripId].push(item);
-                return acc;
-              }, {} as Record<string, UnifiedItem[]>);
-
-              const tripIds = Object.keys(itemsByTrip);
-              const showTripBadges = allTrips.length > 1 && tripIds.length > 1;
-
-              return (
-                <div key={day} className="space-y-4">
-                  {selectedDay === null && (
-                    <div className="flex items-center gap-3 pb-2">
-                      <h2 className="font-heading text-2xl text-primary">Day {day}</h2>
-                      {showTripBadges && (
-                        <div className="flex gap-2">
-                          {tripIds.map(tripId => {
-                            const trip = allTrips.find(t => t.id === tripId);
-                            return trip ? (
-                              <Badge key={tripId} variant="secondary" className="text-xs font-body">
-                                {trip.title}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-                      <Separator className="flex-1" />
-                    </div>
-                  )}
-                  <div className="space-y-4">
-                    {dayItems.map((item, index) => (
-                      <TimelineItem
-                        key={item.id}
-                        item={item}
-                        isLast={index === dayItems.length - 1}
-                        onToggleComplete={handleToggleComplete}
-                        isUpdating={isUpdating}
-                      />
-                    ))}
+            {Object.entries(itemsByDay).map(([day, dayItems]) => (
+              <div key={day} className="space-y-4">
+                {selectedDay === null && (
+                  <div className="flex items-center gap-3 pb-2">
+                    <h2 className="font-heading text-2xl text-primary">Day {day}</h2>
+                    <Separator className="flex-1" />
                   </div>
+                )}
+                <div className="space-y-4">
+                  {dayItems.map((item, index) => (
+                    <TimelineItem
+                      key={item.id}
+                      item={item}
+                      isLast={index === dayItems.length - 1}
+                      onToggleComplete={handleToggleComplete}
+                      isUpdating={isUpdating}
+                    />
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
         {/* Empty State: Filtered items empty */}
-        {!loading && unifiedItems.length > 0 && filteredItems.length === 0 && selectedDay !== null && (
+        {!loading && mappedItems.length > 0 && filteredItems.length === 0 && selectedDay !== null && (
           <div className="text-center py-12 space-y-4">
             <p className="font-body text-muted-foreground text-lg">
               No activities found for Day {selectedDay}.
@@ -472,11 +434,18 @@ export default function ItineraryPage() {
               variant="outline"
               onClick={() => setSelectedDay(null)}
               className="font-body"
+              type="button"
             >
               View All Days
             </Button>
           </div>
         )}
+        
+        {/* Debug Info - Only in development or if specifically needed */}
+        <div className="text-xs text-muted-foreground mt-12 pt-4 border-t text-center">
+          Loaded {allTrips.length} trip(s). 
+          {allTrips.map(t => `${t.title} (${t.status})`).join(', ')}
+        </div>
       </div>
     </div>
   );
