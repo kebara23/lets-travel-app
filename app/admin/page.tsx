@@ -162,7 +162,19 @@ export default function AdminDashboard() {
     try {
       console.log("📊 Fetching recent activity...");
       
-      // First, get notifications with all fields
+      // First, get the current admin user ID
+      const { data: { session } } = await supabase.auth.getSession();
+      const adminId = session?.user?.id;
+      
+      if (!adminId) {
+        console.warn("⚠️ No admin session found, cannot fetch notifications");
+        setRecentActivity([]);
+        return;
+      }
+      
+      console.log("📊 Admin ID:", adminId);
+      
+      // Get notifications for the current admin user
       const { data: notifications, error } = await supabase
         .from("notifications")
         .select(`
@@ -179,6 +191,7 @@ export default function AdminDashboard() {
           resource_type,
           user_id
         `)
+        .eq("user_id", adminId) // CRITICAL: Filter by admin user_id
         .order("created_at", { ascending: false })
         .limit(5);
 
