@@ -79,13 +79,19 @@ type Trip = {
   itinerary_items?: ItineraryItem[];
 };
 
+type TripWithItems = Trip & {
+  itinerary_items: ItineraryItem[];
+};
+
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [trip, setTrip] = useState<Trip | null>(null);
+  const [allTrips, setAllTrips] = useState<Trip[]>([]); // Store all active trips
   const [tripLoading, setTripLoading] = useState(true);
   const [nextActivity, setNextActivity] = useState<ItineraryItem | null>(null);
   const [nextActivityDate, setNextActivityDate] = useState<Date | null>(null);
+  const [nextActivityTripId, setNextActivityTripId] = useState<string | null>(null); // Track which trip the next activity belongs to
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -129,9 +135,9 @@ export default function DashboardPage() {
         if (isMounted) {
           setUser(session.user);
           
-          // Fetch user's most recent trip
+          // Fetch all user's active trips
           if (session.user.id) {
-            await fetchUserTrip(currentSupabase, session.user.id);
+            await fetchUserTrips(currentSupabase, session.user.id);
           }
         }
       } catch (error) {
@@ -163,45 +169,93 @@ export default function DashboardPage() {
     }
 
     try {
-      console.log("Fetching trip for user:", userId);
+      console.log("📊 Fetching ALL trips for user:", userId);
       
-      const { data, error } = await supabaseClient
+      // Fetch ALL active trips (not just one)
+      const { data: tripsData, error: tripsError } = await supabaseClient
         .from("trips")
         .select("*, itinerary_items(*)")
         .eq("user_id", userId)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+        .in("status", ["active", "upcoming"])
+        .order("start_date", { ascending: true }); // Order by start date, not created_at
 
-      if (error) {
-        // If no trip found, error.code will be 'PGRST116'
-        if (error.code === "PGRST116") {
-          console.log("No trips found for user");
-          setTrip(null);
-        } else {
-          console.error("Error fetching trip:", error);
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to load trip information.",
+      if (tripsError) {
+        console.error("Error fetching trips:", tripsError);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load trip information.",
+        });
+        setTrip(null);
+        setTripLoading(false);
+        return;
+      }
+
+      if (!tripsData || tripsData.length === 0) {
+        console.log("No trips found for user");
+        setTrip(null);
+        setTripLoading(false);
+        return;
+      }
+
+      console.log(`✅ Found ${tripsData.length} trip(s) for user`);
+
+      // Collect ALL itinerary items from ALL trips
+      const allItems: Array<{ item: ItineraryItem; tripId: string; tripTitle: string }> = [];
+      
+      tripsData.forEach((trip: any) => {
+        if (trip.itinerary_items && Array.isArray(trip.itinerary_items)) {
+          trip.itinerary_items.forEach((item: ItineraryItem) => {
+            allItems.push({
+              item,
+              tripId: trip.id,
+              tripTitle: trip.title,
+            });
           });
         }
-      } else {
-        console.log("Trip loaded:", data);
-        setTrip(data as Trip);
-        
-        // Calculate next activity
-        if (data.itinerary_items && data.itinerary_items.length > 0) {
-          const next = getNextActivity(data.itinerary_items as ItineraryItem[]);
-          if (next) {
-            setNextActivity(next.item);
-            setNextActivityDate(next.date);
+      });
+
+      console.log(`📋 Total itinerary items across all trips: ${allItems.length}`);
+
+      // Find the next activity from ALL trips
+      if (allItems.length > 0) {
+        const next = getNextActivityFromAllItems(allItems);
+        if (next) {
+          console.log("✅ Next Activity Found:", {
+            title: next.item.title,
+            trip: next.tripTitle,
+            date: next.date.toISOString(),
+          });
+          setNextActivity(next.item);
+          setNextActivityDate(next.date);
+          setNextActivityTripId(next.tripId);
+          
+          // Set the trip that contains the next activity (or the first trip if no next activity)
+          const tripWithNextActivity = tripsData.find((t: any) => t.id === next.tripId);
+          if (tripWithNextActivity) {
+            setTrip(tripWithNextActivity as Trip);
+          } else {
+            // Fallback: show the first trip
+            setTrip(tripsData[0] as Trip);
           }
+        } else {
+          console.log("ℹ️ No upcoming activities found");
+          // Show the first trip even if no upcoming activities
+          setTrip(tripsData[0] as Trip);
+          setNextActivity(null);
+          setNextActivityDate(null);
+          setNextActivityTripId(null);
         }
+      } else {
+        console.log("ℹ️ No itinerary items found in any trip");
+        // Show the first trip even if no items
+        setTrip(tripsData[0] as Trip);
+        setNextActivity(null);
+        setNextActivityDate(null);
+        setNextActivityTripId(null);
       }
     } catch (error: any) {
-      console.error("Exception fetching trip:", error);
+      console.error("Exception fetching trips:", error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -212,20 +266,29 @@ export default function DashboardPage() {
     }
   }
 
-  // Find next activity from itinerary items
-  function getNextActivity(items: ItineraryItem[]): { item: ItineraryItem; date: Date } | null {
+  // Find next activity from ALL trips' items
+  function getNextActivityFromAllItems(
+    allItems: Array<{ item: ItineraryItem; tripId: string; tripTitle: string }>
+  ): { item: ItineraryItem; date: Date; tripId: string; tripTitle: string } | null {
     const now = new Date();
-    const upcoming: { item: ItineraryItem; date: Date }[] = [];
+    const upcoming: Array<{ item: ItineraryItem; date: Date; tripId: string; tripTitle: string }> = [];
 
-    for (const item of items) {
+    for (const { item, tripId, tripTitle } of allItems) {
       if (item.is_completed) continue;
 
-      const [hours, minutes] = item.start_time.split(":").map(Number);
-      const activityDate = new Date(item.day_date);
-      activityDate.setHours(hours, minutes, 0, 0);
+      // Parse time and date
+      try {
+        const [hours, minutes] = item.start_time.split(":").map(Number);
+        const activityDate = new Date(item.day_date);
+        activityDate.setHours(hours, minutes, 0, 0);
 
-      if (activityDate > now) {
-        upcoming.push({ item, date: activityDate });
+        // Only include future activities
+        if (activityDate > now) {
+          upcoming.push({ item, date: activityDate, tripId, tripTitle });
+        }
+      } catch (error) {
+        console.warn("⚠️ Error parsing activity date/time:", item);
+        continue;
       }
     }
 
@@ -233,12 +296,16 @@ export default function DashboardPage() {
       return null;
     }
 
+    // Sort by date (earliest first)
     upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
     const next = upcoming[0];
+    
+    const timeUntil = Math.round((next.date.getTime() - now.getTime()) / (1000 * 60 * 60));
     console.log("✅ Next Activity Found:", {
       title: next.item.title,
+      trip: next.tripTitle,
       date: next.date.toISOString(),
-      timeUntil: Math.round((next.date.getTime() - now.getTime()) / (1000 * 60 * 60)) + " hours",
+      timeUntil: `${timeUntil} hours`,
     });
 
     return next;
