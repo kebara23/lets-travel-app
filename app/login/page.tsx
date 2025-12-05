@@ -349,7 +349,15 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 w-full">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  console.log("📱 Form submitted on mobile");
+                  form.handleSubmit(onSubmit)(e);
+                }} 
+                className="space-y-6 w-full"
+                noValidate
+              >
                 <FormField
                   control={form.control}
                   name="email"
