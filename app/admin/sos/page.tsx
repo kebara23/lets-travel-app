@@ -471,7 +471,6 @@ export default function SOSCenterPage() {
                   </p>
                 </div>
               </div>
-            <>
               {/* Map */}
               <div className="flex-1 relative">
                 {selectedAlert.lat && selectedAlert.lng ? (
