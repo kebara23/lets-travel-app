@@ -147,3 +147,4 @@ const OPEN_CLIENT_ID = "00000000-0000-0000-0000-000000000000";
 - Status is recalculated on every render based on current date
 - Duplicate preserves all itinerary items but resets completion status
 
+

@@ -14,3 +14,4 @@ WHERE is_template = true;
 COMMENT ON COLUMN public.explore_posts.is_template IS 
 'If true, this post is a template/default that can be duplicated to clients';
 
+
