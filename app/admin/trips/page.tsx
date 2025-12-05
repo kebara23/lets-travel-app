@@ -221,7 +221,6 @@ export default function TripsManagerPage() {
           start_date: tripData.start_date, // Keep dates but user can change
           end_date: tripData.end_date,
           status: "draft",
-          description: tripData.description || null,
         })
         .select()
         .single();
