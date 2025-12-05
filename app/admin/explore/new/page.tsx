@@ -26,22 +26,76 @@ export default function NewPostPage() {
     image_url: "", content: "", visibility: "global", target_user_id: "", is_template: false
   });
 
+  // Helper to upload image to Supabase Storage
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      // Ensure user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Authentication required for upload");
+
+      // Create unique file path: explore-images/TIMESTAMP-filename
+      // Sanitizing filename to avoid issues
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `explore-images/${fileName}`;
+
+      // Upload to 'public' bucket (common convention) or check if 'images' exists
+      // Let's try 'public' bucket first, assuming it is configured for public access
+      // Note: You might need to create this bucket in Supabase dashboard if not exists
+      const { error: uploadError } = await supabase.storage
+        .from('public')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        // If bucket 'public' doesn't exist, you might need to create it via SQL or Dashboard
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('public')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Error",
+        description: "Failed to upload image. Please check if 'public' bucket exists in Supabase Storage."
+      });
+      return null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
     try {
+      let finalImageUrl = formData.image_url;
+
+      // Handle file upload if a file is selected
+      if (selectedFile) {
+        const uploadedUrl = await uploadImage(selectedFile);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        } else {
+          // Stop submission if upload failed but file was selected
+          setLoading(false);
+          return; 
+        }
+      }
+
       const payload: any = { 
         title: formData.title,
         subtitle: formData.subtitle,
         category: formData.category,
-        image_url: formData.image_url,
+        image_url: finalImageUrl,
         content: formData.content,
         visibility: formData.visibility,
-        // Only include target_user_id if it's not empty
         target_user_id: formData.target_user_id || null,
-        // Only include is_template if the column exists (it might be failing if schema is outdated)
-        // but let's assume it exists or handle the error gracefully
         is_template: formData.is_template
       };
       
@@ -50,19 +104,6 @@ export default function NewPostPage() {
       // Clean payload to remove empty strings for nullable fields
       if (payload.target_user_id === "") payload.target_user_id = null;
       
-      // Note: File upload logic should be handled here
-      // For now, we'll just use the image_url
-      // When you implement cloud upload, replace image_url with the uploaded URL
-      if (selectedFile) {
-        // TODO: Upload file to cloud storage and get URL
-        // const uploadedUrl = await uploadToCloud(selectedFile);
-        // payload.image_url = uploadedUrl;
-        toast({
-          title: "File Selected",
-          description: `File "${selectedFile.name}" is ready. Cloud upload logic needs to be implemented.`,
-        });
-      }
-
       const { error } = await supabase.from("explore_posts").insert(payload);
 
       if (error) {
@@ -104,8 +145,8 @@ export default function NewPostPage() {
             onFileSelect={(file) => setSelectedFile(file)}
           />
           {selectedFile && (
-            <p className="text-xs text-slate-500 mt-2 font-body">
-              File selected: {selectedFile.name}. Upload will be handled when you save.
+            <p className="text-xs text-green-600 mt-2 font-body flex items-center">
+              ✓ File selected: {selectedFile.name} (will be uploaded on publish)
             </p>
           )}
         </div>
@@ -161,7 +202,7 @@ export default function NewPostPage() {
         </div>
 
         <Button type="submit" className="w-full bg-slate-900" disabled={loading}>
-          {loading ? "Saving..." : "Publish"}
+          {loading ? "Uploading & Publishing..." : "Publish"}
         </Button>
       </form>
     </div>
