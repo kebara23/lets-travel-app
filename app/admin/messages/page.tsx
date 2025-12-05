@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Search, User as UserIcon, Loader2, MessageSquare, Mail, MailOpen, MoreVertical, Menu, X } from "lucide-react";
+import { Send, Search, User as UserIcon, Loader2, MessageSquare, Mail, MailOpen, MoreVertical, ArrowLeft } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,7 +69,17 @@ export default function AdminMessagesPage() {
   const [loadingMessageList, setLoadingMessageList] = useState(true);
   const [sending, setSending] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "chat">("list");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // 1. Auth & Load Clients & Message List
   useEffect(() => {
@@ -439,310 +449,172 @@ export default function AdminMessagesPage() {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Render Conversation List Component (reusable)
+  const renderConversationList = () => (
+    <div className="w-full md:w-80 border-r bg-white flex flex-col h-full">
+      <div className="p-4 border-b">
+        <h2 className="font-heading text-lg font-semibold text-slate-800 mb-4">Inbox</h2>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Search messages..."
+            className="pl-9 bg-slate-50 border-slate-200"
+          />
+        </div>
+      </div>
+      
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col p-2">
+          {loadingMessageList ? (
+            <div className="p-4 text-center text-slate-400">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+              <span className="text-xs">Loading messages...</span>
+            </div>
+          ) : messageList.length === 0 ? (
+            <div className="p-4 text-center text-slate-500 text-sm">
+              No messages found.
+            </div>
+          ) : (
+            messageList.map((msg) => {
+              const isUnread = !msg.is_read;
+              const senderUser = users.find((u) => u.id === msg.sender_id);
+              
+              return (
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "group relative flex items-start gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer border",
+                    isUnread
+                      ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
+                      : "bg-white border-transparent hover:bg-slate-50",
+                    selectedUser?.id === msg.sender_id && "bg-primary/5 border-primary/20"
+                  )}
+                  onClick={() => {
+                    if (senderUser) {
+                      setSelectedUser(senderUser);
+                      setViewMode("chat");
+                    }
+                  }}
+                >
+                  <Avatar className="h-10 w-10 border shrink-0">
+                    <AvatarFallback className={isUnread ? "bg-blue-200 text-blue-700" : "bg-slate-200"}>
+                      {getInitials(senderUser?.full_name || msg.sender_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={cn(
+                              "text-sm truncate",
+                              isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"
+                            )}
+                          >
+                            {senderUser?.full_name || msg.sender_name}
+                          </span>
+                          {isUnread && (
+                            <div className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            "text-xs truncate mb-1",
+                            isUnread ? "text-slate-700 font-medium" : "text-slate-500"
+                          )}
+                        >
+                          {msg.sender_email}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-sm line-clamp-2",
+                            isUnread ? "text-slate-800 font-medium" : "text-slate-600"
+                          )}
+                        >
+                          {msg.content}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {formatTime(msg.created_at)}
+                        </p>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleReadStatus(msg.id, msg.is_read);
+                            }}
+                            className="font-body"
+                          >
+                            {msg.is_read ? (
+                              <>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Mark as Unread
+                              </>
+                            ) : (
+                              <>
+                                <MailOpen className="h-4 w-4 mr-2" />
+                                Mark as Read
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+
   return (
     <div className="flex h-[calc(100vh-4rem)] w-full bg-slate-50 relative">
-      {/* Backdrop - Mobile Only */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
-          onClick={() => setIsSidebarOpen(false)}
-          aria-hidden="true"
-        />
+      {/* Conversation List */}
+      {/* Mobile: Show only when no conversation selected */}
+      {/* Desktop: Always show (side-by-side) */}
+      {(!isMobile || !selectedUser) && (
+        <div className={cn(
+          "w-full md:w-80",
+          isMobile && selectedUser ? "hidden" : "flex"
+        )}>
+          {renderConversationList()}
+        </div>
       )}
 
-      {/* Sidebar: Message List - Desktop */}
-      <div className="w-80 border-r bg-white flex flex-col hidden md:flex">
-        <div className="p-4 border-b">
-          <h2 className="font-heading text-lg font-semibold text-slate-800 mb-4">Inbox</h2>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search messages..."
-              className="pl-9 bg-slate-50 border-slate-200"
-            />
-          </div>
-        </div>
-        
-        <ScrollArea className="flex-1">
-          <div className="flex flex-col p-2">
-            {loadingMessageList ? (
-              <div className="p-4 text-center text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                <span className="text-xs">Loading messages...</span>
-              </div>
-            ) : messageList.length === 0 ? (
-              <div className="p-4 text-center text-slate-500 text-sm">
-                No messages found.
-              </div>
-            ) : (
-              messageList.map((msg) => {
-                const isUnread = !msg.is_read;
-                const senderUser = users.find((u) => u.id === msg.sender_id);
-                
-                return (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "group relative flex items-start gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer border",
-                      isUnread
-                        ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
-                        : "bg-white border-transparent hover:bg-slate-50",
-                      selectedUser?.id === msg.sender_id && "bg-primary/5 border-primary/20"
-                    )}
-                    onClick={() => {
-                      if (senderUser) {
-                        setSelectedUser(senderUser);
-                        setViewMode("chat");
-                      }
-                    }}
-                  >
-                    <Avatar className="h-10 w-10 border shrink-0">
-                      <AvatarFallback className={isUnread ? "bg-blue-200 text-blue-700" : "bg-slate-200"}>
-                        {getInitials(senderUser?.full_name || msg.sender_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span
-                              className={cn(
-                                "text-sm truncate",
-                                isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"
-                              )}
-                            >
-                              {senderUser?.full_name || msg.sender_name}
-                            </span>
-                            {isUnread && (
-                              <div className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
-                            )}
-                          </div>
-                          <p
-                            className={cn(
-                              "text-xs truncate mb-1",
-                              isUnread ? "text-slate-700 font-medium" : "text-slate-500"
-                            )}
-                          >
-                            {msg.sender_email}
-                          </p>
-                          <p
-                            className={cn(
-                              "text-sm line-clamp-2",
-                              isUnread ? "text-slate-800 font-medium" : "text-slate-600"
-                            )}
-                          >
-                            {msg.content}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {formatTime(msg.created_at)}
-                          </p>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleReadStatus(msg.id, msg.is_read);
-                              }}
-                              className="font-body"
-                            >
-                              {msg.is_read ? (
-                                <>
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Mark as Unread
-                                </>
-                              ) : (
-                                <>
-                                  <MailOpen className="h-4 w-4 mr-2" />
-                                  Mark as Read
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* Sidebar: Message List - Mobile Drawer */}
-      <div
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 w-80 flex flex-col bg-white border-r transform transition-transform duration-300 ease-in-out md:hidden",
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {/* Mobile Header with Close Button */}
-        <div className="flex h-16 items-center justify-between border-b px-4 shrink-0">
-          <h2 className="font-heading text-lg font-semibold text-slate-800">Inbox</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSidebarOpen(false)}
-            className="text-slate-600 hover:text-slate-900"
-            aria-label="Close menu"
-          >
-            <X className="h-6 w-6" />
-          </Button>
-        </div>
-
-        <div className="p-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search messages..."
-              className="pl-9 bg-slate-50 border-slate-200"
-            />
-          </div>
-        </div>
-        
-        <ScrollArea className="flex-1">
-          <div className="flex flex-col p-2">
-            {loadingMessageList ? (
-              <div className="p-4 text-center text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                <span className="text-xs">Loading messages...</span>
-              </div>
-            ) : messageList.length === 0 ? (
-              <div className="p-4 text-center text-slate-500 text-sm">
-                No messages found.
-              </div>
-            ) : (
-              messageList.map((msg) => {
-                const isUnread = !msg.is_read;
-                const senderUser = users.find((u) => u.id === msg.sender_id);
-                
-                return (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "group relative flex items-start gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer border",
-                      isUnread
-                        ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
-                        : "bg-white border-transparent hover:bg-slate-50",
-                      selectedUser?.id === msg.sender_id && "bg-primary/5 border-primary/20"
-                    )}
-                    onClick={() => {
-                      if (senderUser) {
-                        setSelectedUser(senderUser);
-                        setViewMode("chat");
-                        setIsSidebarOpen(false); // Close drawer on mobile when selecting
-                      }
-                    }}
-                  >
-                    <Avatar className="h-10 w-10 border shrink-0">
-                      <AvatarFallback className={isUnread ? "bg-blue-200 text-blue-700" : "bg-slate-200"}>
-                        {getInitials(senderUser?.full_name || msg.sender_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span
-                              className={cn(
-                                "text-sm truncate",
-                                isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"
-                              )}
-                            >
-                              {senderUser?.full_name || msg.sender_name}
-                            </span>
-                            {isUnread && (
-                              <div className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
-                            )}
-                          </div>
-                          <p
-                            className={cn(
-                              "text-xs truncate mb-1",
-                              isUnread ? "text-slate-700 font-medium" : "text-slate-500"
-                            )}
-                          >
-                            {msg.sender_email}
-                          </p>
-                          <p
-                            className={cn(
-                              "text-sm line-clamp-2",
-                              isUnread ? "text-slate-800 font-medium" : "text-slate-600"
-                            )}
-                          >
-                            {msg.content}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {formatTime(msg.created_at)}
-                          </p>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleReadStatus(msg.id, msg.is_read);
-                              }}
-                              className="font-body"
-                            >
-                              {msg.is_read ? (
-                                <>
-                                  <Mail className="h-4 w-4 mr-2" />
-                                  Mark as Unread
-                                </>
-                              ) : (
-                                <>
-                                  <MailOpen className="h-4 w-4 mr-2" />
-                                  Mark as Read
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white md:bg-slate-50/50">
+      {/* Mobile: Show only when conversation selected */}
+      {/* Desktop: Always show (side-by-side) */}
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 bg-white md:bg-slate-50/50",
+        selectedUser ? "flex" : "hidden md:flex"
+      )}>
         {selectedUser ? (
           <>
             {/* Chat Header */}
             <header className="flex-none bg-white border-b px-4 md:px-6 py-4 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-3">
-                {/* Hamburger Menu - Mobile Only */}
+                {/* Back Button - Mobile Only */}
                 <Button
                   variant="ghost"
                   size="icon"
                   className="md:hidden"
-                  onClick={() => setIsSidebarOpen(true)}
-                  aria-label="Open conversations"
+                  onClick={() => setSelectedUser(null)}
+                  aria-label="Back to conversations"
                 >
-                  <Menu className="h-6 w-6" />
+                  <ArrowLeft className="h-6 w-6" />
                 </Button>
                 <Avatar className="h-10 w-10 border border-slate-200">
                   <AvatarFallback className="bg-primary text-primary-foreground">
@@ -833,14 +705,16 @@ export default function AdminMessagesPage() {
             </div>
           </>
         ) : (
-          /* Empty State (No user selected) */
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <UserIcon className="h-8 w-8 text-slate-300" />
+          /* Empty State (No user selected) - Desktop Only */
+          !isMobile && (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <UserIcon className="h-8 w-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-medium text-slate-700">Select a conversation</h3>
+              <p className="text-sm">Choose a client from the sidebar to view messages.</p>
             </div>
-            <h3 className="text-lg font-medium text-slate-700">Select a conversation</h3>
-            <p className="text-sm">Choose a client from the sidebar to view messages.</p>
-          </div>
+          )
         )}
       </div>
     </div>
