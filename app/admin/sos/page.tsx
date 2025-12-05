@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Phone, CheckCircle, MapPin, Clock } from "lucide-react";
+import { AlertTriangle, Phone, CheckCircle, MapPin, Clock, ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Dynamically import Map component with SSR disabled
 const Map = dynamic(
@@ -339,10 +340,13 @@ export default function SOSCenterPage() {
         </div>
       </div>
 
-      {/* Main Content - Two Columns */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content - Two Columns (Desktop) / Single Column (Mobile) */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Column - Alerts List */}
-        <div className="w-96 border-r bg-white overflow-y-auto flex-shrink-0">
+        <div className={cn(
+          "w-full lg:w-96 border-r bg-white overflow-y-auto flex-shrink-0",
+          selectedAlert && "hidden lg:block" // Hide list on mobile when alert is selected
+        )}>
           <div className="p-4 space-y-3">
             {alerts.length === 0 ? (
               <Card className="bg-white border-slate-200">
@@ -358,48 +362,84 @@ export default function SOSCenterPage() {
                 const isPending = alert.status === "pending";
                 const isSelected = selectedAlert?.id === alert.id;
                 
+                const handleCardClick = (e: React.MouseEvent | React.TouchEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  // Update selected alert (works for both mobile and desktop)
+                  setSelectedAlert(alert);
+                  
+                  // On mobile, scroll to details section if it exists
+                  // The layout will handle showing details responsively
+                };
+                
                 return (
-                  <Card
+                  <div
                     key={alert.id}
-                    className={`cursor-pointer transition-all ${
-                      isSelected
-                        ? "border-primary shadow-lg"
-                        : isPending
-                        ? "border-red-500 bg-red-50/50"
-                        : "border-slate-200 hover:border-slate-300"
-                    }`}
-                    onClick={() => setSelectedAlert(alert)}
+                    onClick={handleCardClick}
+                    onTouchStart={(e) => {
+                      // Visual feedback on touch start
+                      const target = e.currentTarget;
+                      target.classList.add("active:scale-[0.98]");
+                    }}
+                    className={cn(
+                      "cursor-pointer transition-all select-none",
+                      "active:scale-[0.98] active:bg-red-50/70",
+                      "touch-manipulation", // Optimize touch handling
+                      isSelected && "ring-2 ring-primary ring-offset-2"
+                    )}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleCardClick(e);
+                      }
+                    }}
+                    aria-label={`View SOS alert from ${alert.users?.full_name || "Unknown User"}`}
                   >
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-slate-900 font-body truncate">
-                              {alert.users?.full_name || "Unknown User"}
-                            </h3>
-                            <p className="text-xs text-slate-500 font-body flex items-center gap-1 mt-1">
-                              <Clock className="h-3 w-3" />
-                              {formatTime(alert.created_at)}
-                            </p>
+                    <Card
+                      className={cn(
+                        "transition-all border-2",
+                        isSelected
+                          ? "border-primary shadow-lg bg-primary/5"
+                          : isPending
+                          ? "border-red-500 bg-red-50/50 hover:bg-red-50/70"
+                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                      )}
+                    >
+                      <CardContent className="p-4 relative">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0 pr-2">
+                              <h3 className="font-semibold text-slate-900 font-body truncate">
+                                {alert.users?.full_name || "Unknown User"}
+                              </h3>
+                              <p className="text-xs text-slate-500 font-body flex items-center gap-1 mt-1">
+                                <Clock className="h-3 w-3" />
+                                {formatTime(alert.created_at)}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={getStatusBadge(alert.status)}
+                              className="font-body text-xs flex-shrink-0 pointer-events-none relative z-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {alert.status}
+                            </Badge>
                           </div>
-                          <Badge
-                            variant={getStatusBadge(alert.status)}
-                            className="font-body text-xs flex-shrink-0"
-                          >
-                            {alert.status}
-                          </Badge>
+                          {alert.lat && alert.lng && (
+                            <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
+                              <MapPin className="h-3 w-3" />
+                              <span>
+                                {alert.lat.toFixed(4)}, {alert.lng.toFixed(4)}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        {alert.lat && alert.lng && (
-                          <div className="flex items-center gap-1 text-xs text-slate-500 font-body">
-                            <MapPin className="h-3 w-3" />
-                            <span>
-                              {alert.lat.toFixed(4)}, {alert.lng.toFixed(4)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </div>
                 );
               })
             )}
@@ -407,8 +447,32 @@ export default function SOSCenterPage() {
         </div>
 
         {/* Right Column - Map and Actions */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden",
+          !selectedAlert && "hidden lg:flex" // Hide details on mobile when no alert selected
+        )}>
           {selectedAlert ? (
+            <>
+              {/* Mobile Back Button */}
+              <div className="lg:hidden p-4 border-b bg-white flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedAlert(null)}
+                  className="flex-shrink-0"
+                  aria-label="Back to alerts list"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <div className="flex-1 min-w-0">
+                  <h2 className="font-semibold text-slate-900 font-body truncate">
+                    {selectedAlert.users?.full_name || "Unknown User"}
+                  </h2>
+                  <p className="text-xs text-slate-500 font-body truncate">
+                    {selectedAlert.users?.email || "No email"}
+                  </p>
+                </div>
+              </div>
             <>
               {/* Map */}
               <div className="flex-1 relative">
