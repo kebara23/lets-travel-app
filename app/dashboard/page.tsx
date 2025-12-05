@@ -310,15 +310,24 @@ export default function DashboardPage() {
         continue;
       }
 
-      // Parse time and date
+      // Parse time and date (local timezone, avoid implicit UTC parsing)
       try {
         const [hours, minutes] = item.start_time.split(":").map(Number);
-        const startDate = new Date(item.day_date);
-        startDate.setHours(hours, minutes, 0, 0);
+        const [year, month, day] = item.day_date.split("-").map(Number);
+
+        // Create Date object using local timezone to avoid UTC shift
+        const startDate = new Date(year, (month || 1) - 1, day, hours, minutes || 0, 0, 0);
 
         // Validate the date
-        if (isNaN(startDate.getTime())) {
-          console.error("❌ Invalid date created for item:", item.title);
+        if (
+          [year, month, day].some((v) => isNaN(v)) ||
+          isNaN(startDate.getTime())
+        ) {
+          console.error("❌ Invalid date created for item:", item.title, {
+            day_date: item.day_date,
+            start_time: item.start_time,
+            parsed: { year, month, day, hours, minutes },
+          });
           continue;
         }
 
