@@ -401,18 +401,35 @@ export default function LoginPage() {
                   className={cn(
                     "w-full h-12 min-h-[48px]",
                     "bg-primary text-primary-foreground",
-                    "hover:bg-primary/90 active:bg-primary/80",
+                    "hover:bg-primary/90 active:bg-primary/80 active:scale-[0.98]",
                     "transition-all duration-200",
-                    "font-body font-semibold",
+                    "font-body font-semibold text-base",
                     "touch-manipulation", // Optimize touch handling
-                    "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    "relative z-10" // Ensure button is above other elements
                   )}
                   disabled={isLoading}
                   onClick={(e) => {
+                    // Debug logging for mobile
+                    console.log("📱 Button clicked:", {
+                      isLoading,
+                      formValid: form.formState.isValid,
+                      formErrors: form.formState.errors,
+                      email: form.getValues("email"),
+                      passwordLength: form.getValues("password")?.length
+                    });
+                    
                     // Ensure form submission works on mobile
-                    if (!form.formState.isValid) {
-                      e.preventDefault();
-                      form.handleSubmit(onSubmit)();
+                    // Don't prevent default - let the form submit naturally
+                    // But also manually trigger if needed
+                    const values = form.getValues();
+                    if (values.email && values.password && !isLoading) {
+                      console.log("📱 Manually triggering form submission");
+                      // Small delay to ensure form state is ready
+                      setTimeout(() => {
+                        form.handleSubmit(onSubmit)();
+                      }, 50);
                     }
                   }}
                 >
