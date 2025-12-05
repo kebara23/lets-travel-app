@@ -531,7 +531,7 @@ export default function AdminDashboard() {
                       "min-h-[48px]",
                       "relative z-10",
                       isClickable
-                        ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                        ? "cursor-pointer hover:bg-slate-50 active:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 group"
                         : "cursor-default opacity-60"
                     )}
                     aria-label={`${actorName} actualizó ${resourceLabel} para ${targetName}`}
