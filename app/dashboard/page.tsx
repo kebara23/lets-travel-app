@@ -181,7 +181,7 @@ export default function DashboardPage() {
       // Fetch ALL active trips (not just one)
       const { data: tripsData, error: tripsError } = await supabaseClient
         .from("trips")
-        .select("*, itinerary_items(*)")
+        .select("*, itinerary_items(*)") // ✅ explicit deep fetch
         .eq("user_id", userId)
         .in("status", ["active", "upcoming"])
         .order("start_date", { ascending: true }); // Order by start date, not created_at
@@ -206,11 +206,13 @@ export default function DashboardPage() {
       }
 
       console.log(`✅ Found ${tripsData.length} trip(s) for user`);
+      console.log("DASHBOARD DEBUG - Trips payload:", tripsData);
 
       // Collect ALL itinerary items from ALL trips
       const allItems: Array<{ item: ItineraryItem; tripId: string; tripTitle: string }> = [];
       
       tripsData.forEach((trip: any) => {
+        console.log("DASHBOARD DEBUG - Trip:", trip?.id, "itinerary_items:", trip?.itinerary_items);
         if (trip.itinerary_items && Array.isArray(trip.itinerary_items)) {
           trip.itinerary_items.forEach((item: ItineraryItem) => {
             allItems.push({
@@ -223,6 +225,7 @@ export default function DashboardPage() {
       });
 
       console.log(`📋 Total itinerary items across all trips: ${allItems.length}`);
+      console.log("DASHBOARD DEBUG - Activities (flattened):", allItems.map(({ item }) => item));
 
       // Find the next activity from ALL trips
       if (allItems.length > 0) {
