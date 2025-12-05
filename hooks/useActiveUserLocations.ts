@@ -17,9 +17,12 @@ export function useActiveUserLocations() {
   const [error, setError] = useState<Error | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchActiveUsers = useCallback(async () => {
+  // Added 'silent' parameter to prevent loading state flicker on background updates
+  const fetchActiveUsers = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       
       // Fetch all active tracking data with user info
       const { data: trackingData, error: trackingError } = await supabase
@@ -83,9 +86,13 @@ export function useActiveUserLocations() {
       setError(null);
     } catch (err) {
       console.error("Error fetching active user locations:", err);
-      setError(err instanceof Error ? err : new Error("Failed to fetch locations"));
+      if (!silent) {
+        setError(err instanceof Error ? err : new Error("Failed to fetch locations"));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [supabase]);
 
@@ -96,7 +103,8 @@ export function useActiveUserLocations() {
       return;
     }
 
-    fetchActiveUsers();
+    // Initial fetch (verbose)
+    fetchActiveUsers(false);
 
     // Set up realtime subscription
     const channel = supabase
@@ -109,14 +117,14 @@ export function useActiveUserLocations() {
           table: "device_tracking",
         },
         () => {
-          // Refetch when tracking data changes
-          fetchActiveUsers();
+          // Refetch silently when tracking data changes to avoid UI flicker
+          fetchActiveUsers(true);
         }
       )
       .subscribe();
 
-    // Poll every 30 seconds as backup
-    const interval = setInterval(fetchActiveUsers, 30000);
+    // Poll every 30 seconds as backup (silent)
+    const interval = setInterval(() => fetchActiveUsers(true), 30000);
 
     return () => {
       if (typeof window !== "undefined") {
@@ -126,6 +134,5 @@ export function useActiveUserLocations() {
     };
   }, [fetchActiveUsers, supabase]);
 
-  return { activeUsers, loading, error, refetch: fetchActiveUsers };
+  return { activeUsers, loading, error, refetch: () => fetchActiveUsers(false) };
 }
-
