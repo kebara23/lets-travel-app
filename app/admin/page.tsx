@@ -472,7 +472,8 @@ export default function AdminDashboard() {
   }
 
   // Combined fetch function for dashboard data
-  async function fetchDashboardData() {
+  const fetchDashboardData = async () => {
+    console.log("🔄 Refreshing dashboard data...");
     await Promise.allSettled([
       fetchKPIs().catch((err) => {
         console.error("❌ KPIs fetch failed:", err);
@@ -481,7 +482,7 @@ export default function AdminDashboard() {
         console.error("❌ Recent Activity fetch failed:", err);
       }),
     ]);
-  }
+  };
 
   // Manual refresh handler
   async function handleRefresh() {
