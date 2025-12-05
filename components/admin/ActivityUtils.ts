@@ -1,5 +1,37 @@
 import { Plane, Users, MessageCircle, FileText, Bell, AlertTriangle } from "lucide-react";
 
+// Centralized WhatsApp/redirect numbers or links could live here in the future.
+
+/**
+ * Build a deep-link path for recent activity items based on their payload.
+ * Falls back to "#" when we cannot resolve a destination.
+ */
+export function getRedirectPath(activity: any): string {
+  if (!activity) return "#";
+
+  const type = (activity.entity_type || activity.type || "").toUpperCase();
+
+  switch (type) {
+    case "TRIP_UPDATE":
+    case "ITINERARY_CHANGE":
+      return activity.trip_id ? `/admin/trips/${activity.trip_id}` : "#";
+    case "NEW_SOS":
+      return activity.sos_id ? `/admin/sos/${activity.sos_id}` : "/admin/sos";
+    case "CLIENT_UPDATE":
+      return activity.client_id ? `/admin/clients/${activity.client_id}` : "#";
+    case "NEW_MESSAGE":
+      return activity.conversation_id
+        ? `/admin/inbox?conversationId=${activity.conversation_id}`
+        : "/admin/messages";
+    default:
+      // Fallback to legacy link helper when provided
+      if (activity.entity_type || activity.type) {
+        return getActivityLink(activity.entity_type || activity.type, activity.entity_id || null);
+      }
+      return "#";
+  }
+}
+
 // Helper to get icon based on type
 export const getNotificationIcon = (type: string) => {
   switch (type) {

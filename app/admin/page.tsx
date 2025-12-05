@@ -18,7 +18,7 @@ import { Plane, Users, MessageCircle, AlertTriangle, Bell, Calendar, MessageSqua
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { getActivityLink, getNotificationIcon } from "@/components/admin/ActivityUtils";
+import { getActivityLink, getNotificationIcon, getRedirectPath } from "@/components/admin/ActivityUtils";
 import { useRouter } from "next/navigation";
 
 type KPI = {
@@ -490,30 +490,26 @@ export default function AdminDashboard() {
               </TableHeader>
               <TableBody>
                 {recentActivity.map((activity) => {
-                  const Icon = getNotificationIcon(activity.type);
-                  // Determine link based on available metadata, or fallback to generic type
-                  // Assuming 'type' might be the entity type if entity_type is missing for backward compatibility
-                  // But prioritizing entity_type if available.
-                  const entityType = activity.entity_type || activity.type; 
-                  // Some existing notifications might not have entity_type/id, so we handle gracefully.
-                  const linkUrl = getActivityLink(entityType, activity.entity_id || null);
-                  const isClickable = linkUrl !== "#";
+          const Icon = getNotificationIcon(activity.type);
+          // Determine deep link path based on activity payload
+          const linkUrl = getRedirectPath(activity);
+          const isClickable = linkUrl !== "#";
 
                   return (
-                    <TableRow 
-                      key={activity.id} 
-                      className={cn(
-                        "border-slate-200 transition-colors",
-                        isClickable && "hover:bg-slate-50 cursor-pointer group"
-                      )}
-                      onClick={(e) => {
-                        if (isClickable) {
-                          e.stopPropagation();
-                          console.log("Clicked item:", entityType, activity.entity_id || "No ID");
-                          router.push(linkUrl);
-                        }
-                      }}
-                    >
+            <TableRow 
+              key={activity.id} 
+              className={cn(
+                "border-slate-200 transition-colors",
+                isClickable && "hover:bg-slate-50 active:bg-slate-100 cursor-pointer group"
+              )}
+              onClick={(e) => {
+                if (isClickable) {
+                  e.stopPropagation();
+                  console.log("Clicked item:", activity.type, activity.id);
+                  router.push(linkUrl);
+                }
+              }}
+            >
                       <TableCell>
                         <div className="flex items-center justify-center">
                           <Icon className="h-5 w-5 text-slate-600" />
