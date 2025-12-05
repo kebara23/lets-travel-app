@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Phone, CheckCircle, MapPin, Clock } from "lucide-react";
-import L from "leaflet";
 
 // Dynamically import Map component with SSR disabled
 const Map = dynamic(
@@ -48,6 +47,14 @@ export default function SOSCenterPage() {
   const [selectedAlert, setSelectedAlert] = useState<SOSAlert | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure we're on the client before rendering map
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsClient(true);
+    }
+  }, []);
 
   // Play alert sound
   const playAlertSound = () => {
@@ -406,19 +413,25 @@ export default function SOSCenterPage() {
               {/* Map */}
               <div className="flex-1 relative">
                 {selectedAlert.lat && selectedAlert.lng ? (
-                  <Map
-                    markers={[
-                      {
-                        lat: selectedAlert.lat,
-                        lng: selectedAlert.lng,
-                        popupText: `${selectedAlert.users?.full_name || "Unknown User"}\nSOS Alert`,
-                      },
-                    ]}
-                    center={[selectedAlert.lat, selectedAlert.lng]}
-                    zoom={15}
-                    className="rounded-none"
-                    style={{ height: "100%", width: "100%" }}
-                  />
+                  isClient ? (
+                    <Map
+                      markers={[
+                        {
+                          lat: selectedAlert.lat,
+                          lng: selectedAlert.lng,
+                          popupText: `${selectedAlert.users?.full_name || "Unknown User"}\nSOS Alert`,
+                        },
+                      ]}
+                      center={[selectedAlert.lat, selectedAlert.lng]}
+                      zoom={15}
+                      className="rounded-none"
+                      style={{ height: "100%", width: "100%" }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-muted">
+                      <Skeleton className="w-full h-full" />
+                    </div>
+                  )
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-muted">
                     <Card className="bg-white border-slate-200">

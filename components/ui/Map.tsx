@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+import type L from "leaflet";
 
 // Componente auxiliar para recentrar el mapa cuando cambian los puntos
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -19,7 +19,7 @@ type MapProps = {
     lat: number;
     lng: number;
     popupText: string;
-    icon?: L.DivIcon | L.Icon; // Aceptamos iconos personalizados
+    icon?: any; // Aceptamos iconos personalizados (L.DivIcon | L.Icon)
   }>;
   center: [number, number];
   zoom: number;
@@ -39,26 +39,45 @@ function EnhancedPopup({ content }: { content: string }) {
 // Exportamos como "Map" (Named Export) para que coincida con el import dinámico
 export function Map({ markers, center, zoom, className, style }: MapProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const [iconsReady, setIconsReady] = useState(false);
 
   // Estado de montaje: solo se ejecuta una vez cuando el componente se monta en el cliente
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     setIsMounted(true);
 
     // Fix para iconos de Leaflet en Next.js (si no, no se ven los pines)
-    // Solo se ejecuta en el cliente después de montar
-    if (typeof window !== "undefined") {
-      // @ts-ignore
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-      });
-    }
+    // Importar Leaflet dinámicamente solo en el cliente
+    const initIcons = async () => {
+      try {
+        const leaflet = await import("leaflet");
+        const L = leaflet.default as typeof import("leaflet");
+        
+        if (L && L.Icon && L.Icon.Default) {
+          // @ts-ignore
+          delete L.Icon.Default.prototype._getIconUrl;
+          L.Icon.Default.mergeOptions({
+            iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+            iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+            shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+          });
+          setIconsReady(true);
+        } else {
+          setIconsReady(true);
+        }
+      } catch (error) {
+        console.error("Error initializing Leaflet icons:", error);
+        // Continuar de todos modos, los iconos por defecto deberían funcionar
+        setIconsReady(true);
+      }
+    };
+
+    initIcons();
   }, []);
 
-  // Renderizado condicional: solo renderiza el MapContainer cuando el componente está montado
-  if (!isMounted) {
+  // Renderizado condicional: solo renderiza el MapContainer cuando el componente está montado y los iconos están listos
+  if (!isMounted || !iconsReady) {
     return (
       <div className={className || "h-full w-full z-0"} style={style || { height: "100%", width: "100%" }}>
         <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
