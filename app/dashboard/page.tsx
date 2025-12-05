@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [nextActivity, setNextActivity] = useState<ItineraryItem | null>(null);
   const [nextActivityDate, setNextActivityDate] = useState<Date | null>(null);
   const [nextActivityTripId, setNextActivityTripId] = useState<string | null>(null); // Track which trip the next activity belongs to
+  const [nextActivityStatus, setNextActivityStatus] = useState<"happening_now" | "upcoming" | null>(null);
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
   const router = useRouter();
   const { toast } = useToast();
@@ -235,6 +236,7 @@ export default function DashboardPage() {
           setNextActivity(next.item);
           setNextActivityDate(next.date);
           setNextActivityTripId(next.tripId);
+          setNextActivityStatus(next.status);
           
           // Set the trip that contains the next activity (or the first trip if no next activity)
           const tripWithNextActivity = tripsData.find((t: any) => t.id === next.tripId);
@@ -251,6 +253,7 @@ export default function DashboardPage() {
           setNextActivity(null);
           setNextActivityDate(null);
           setNextActivityTripId(null);
+          setNextActivityStatus(null);
         }
       } else {
         console.log("ℹ️ No itinerary items found in any trip");
@@ -272,49 +275,117 @@ export default function DashboardPage() {
     }
   }
 
-  // Find next activity from ALL trips' items
+  // Find next activity from ALL trips' items with priority logic:
+  // Priority 1: Current Activity (Happening Now) - startDate <= CurrentTime <= endDate
+  // Priority 2: Upcoming Activity (Next in future) - startDate > CurrentTime
   function getNextActivityFromAllItems(
     allItems: Array<{ item: ItineraryItem; tripId: string; tripTitle: string }>
-  ): { item: ItineraryItem; date: Date; tripId: string; tripTitle: string } | null {
+  ): { item: ItineraryItem; date: Date; tripId: string; tripTitle: string; status: "happening_now" | "upcoming" } | null {
     const now = new Date();
-    const upcoming: Array<{ item: ItineraryItem; date: Date; tripId: string; tripTitle: string }> = [];
+    now.setSeconds(0, 0); // Normalize to minute precision
+    
+    // Debug: Log all activities received
+    console.log("🔍 All Trip Activities:", allItems.map(({ item }) => ({
+      id: item.id,
+      title: item.title,
+      day_date: item.day_date,
+      start_time: item.start_time,
+      is_completed: item.is_completed,
+    })));
+
+    const currentActivities: Array<{ item: ItineraryItem; date: Date; tripId: string; tripTitle: string }> = [];
+    const upcomingActivities: Array<{ item: ItineraryItem; date: Date; tripId: string; tripTitle: string }> = [];
+
+    console.log("🔍 Finding next activity from", allItems.length, "items across all trips");
+    console.log("🕐 Current time:", now.toISOString(), "Local:", now.toLocaleString());
 
     for (const { item, tripId, tripTitle } of allItems) {
-      if (item.is_completed) continue;
+      if (item.is_completed) {
+        console.log("⏭️ Skipping completed item:", item.title);
+        continue;
+      }
+
+      if (!item.day_date || !item.start_time) {
+        console.log("⏭️ Skipping item with missing date/time:", item.title);
+        continue;
+      }
 
       // Parse time and date
       try {
         const [hours, minutes] = item.start_time.split(":").map(Number);
-        const activityDate = new Date(item.day_date);
-        activityDate.setHours(hours, minutes, 0, 0);
+        const startDate = new Date(item.day_date);
+        startDate.setHours(hours, minutes, 0, 0);
 
-        // Only include future activities
-        if (activityDate > now) {
-          upcoming.push({ item, date: activityDate, tripId, tripTitle });
+        // Validate the date
+        if (isNaN(startDate.getTime())) {
+          console.error("❌ Invalid date created for item:", item.title);
+          continue;
+        }
+
+        // Estimate end time: assume 2 hours duration if no end_time is provided
+        const endDate = new Date(startDate);
+        endDate.setHours(endDate.getHours() + 2); // Default 2-hour duration
+
+        console.log("📅 Activity:", item.title, {
+          day_date: item.day_date,
+          start_time: item.start_time,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          now: now.toISOString(),
+          isPast: startDate < now,
+          isCurrent: startDate <= now && now <= endDate,
+          isFuture: startDate > now,
+        });
+
+        // PRIORITY 1: Check if activity is happening now (startDate <= now <= endDate)
+        if (startDate <= now && now <= endDate) {
+          console.log("✅ CURRENT ACTIVITY FOUND:", item.title);
+          currentActivities.push({ item, date: startDate, tripId, tripTitle });
+        }
+        // PRIORITY 2: Check if activity is upcoming (startDate > now)
+        else if (startDate > now) {
+          console.log("⏭️ UPCOMING ACTIVITY:", item.title);
+          upcomingActivities.push({ item, date: startDate, tripId, tripTitle });
         }
       } catch (error) {
-        console.warn("⚠️ Error parsing activity date/time:", item);
+        console.warn("⚠️ Error parsing activity date/time:", item, error);
         continue;
       }
     }
 
-    if (upcoming.length === 0) {
-      return null;
+    // PRIORITY 1: Return current activity if any
+    if (currentActivities.length > 0) {
+      // If multiple current activities, return the one that started most recently
+      currentActivities.sort((a, b) => b.date.getTime() - a.date.getTime());
+      const current = currentActivities[0];
+      console.log("✅ CURRENT Activity Selected:", {
+        title: current.item.title,
+        trip: current.tripTitle,
+        date: current.date.toISOString(),
+        status: "happening_now",
+      });
+      return { ...current, status: "happening_now" };
     }
 
-    // Sort by date (earliest first)
-    upcoming.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const next = upcoming[0];
-    
-    const timeUntil = Math.round((next.date.getTime() - now.getTime()) / (1000 * 60 * 60));
-    console.log("✅ Next Activity Found:", {
-      title: next.item.title,
-      trip: next.tripTitle,
-      date: next.date.toISOString(),
-      timeUntil: `${timeUntil} hours`,
-    });
+    // PRIORITY 2: Return upcoming activity if any
+    if (upcomingActivities.length > 0) {
+      // Sort by date (earliest first)
+      upcomingActivities.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const next = upcomingActivities[0];
+      const timeUntil = Math.round((next.date.getTime() - now.getTime()) / (1000 * 60 * 60));
+      console.log("✅ UPCOMING Activity Selected:", {
+        title: next.item.title,
+        trip: next.tripTitle,
+        date: next.date.toISOString(),
+        timeUntil: `${timeUntil} hours`,
+        status: "upcoming",
+      });
+      return { ...next, status: "upcoming" };
+    }
 
-    return next;
+    // No activities found
+    console.log("❌ No current or upcoming activities found");
+    return null;
   }
 
   // Notification handlers
@@ -546,24 +617,41 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-heading text-lg font-semibold text-foreground">
-                        Next Activity
+                        {nextActivityStatus === "happening_now" ? "Happening Now" : "Next Activity"}
                       </h3>
                       <p className="font-body text-sm text-muted-foreground">
                         {nextActivity.title}
                       </p>
                     </div>
-                    <Clock className="h-5 w-5 text-primary" />
+                    {nextActivityStatus === "happening_now" ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+                        <Clock className="h-5 w-5 text-green-600" />
+                      </div>
+                    ) : (
+                      <Clock className="h-5 w-5 text-primary" />
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <NextActivityCountdown targetDate={nextActivityDate} />
-                    <Progress
-                      value={
-                        ((nextActivityDate.getTime() - new Date().getTime()) /
-                          (24 * 60 * 60 * 1000)) *
-                        100
-                      }
-                      className="h-2"
-                    />
+                    {nextActivityStatus === "happening_now" ? (
+                      <div className="text-center py-2 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-sm font-medium text-green-800 font-body">
+                          This activity is currently in progress
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <NextActivityCountdown targetDate={nextActivityDate} />
+                        <Progress
+                          value={
+                            ((nextActivityDate.getTime() - new Date().getTime()) /
+                              (24 * 60 * 60 * 1000)) *
+                            100
+                          }
+                          className="h-2"
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               ) : (
