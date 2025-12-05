@@ -85,35 +85,25 @@ export default function AdminDashboard() {
       let unreadMessages = 0;
       if (adminId) {
         // Count messages where:
-        // - is_read = false
+        // - is_read = false (or is_read IS NULL, as it might default to false)
         // - sender_id != adminId (exclude messages sent by admin)
         // - recipient_id = null (general inbox) OR recipient_id = adminId (direct to admin)
         const { count: unreadCount, error: unreadError } = await supabase
           .from("messages")
           .select("*", { count: "exact", head: true })
-          .eq("is_read", false)
+          .or("is_read.is.null,is_read.eq.false") // Handle both null and false
           .neq("sender_id", adminId) // Exclude messages sent by admin
           .or(`recipient_id.is.null,recipient_id.eq.${adminId}`); // To general inbox OR to this admin
 
         if (unreadError) {
-          console.error("Error counting unread messages:", unreadError);
+          console.error("❌ Error counting unread messages:", unreadError);
+          console.error("   Error details:", unreadError);
         } else {
           unreadMessages = unreadCount || 0;
+          console.log("📧 Unread messages count:", unreadMessages);
         }
       } else {
-        // Fallback: if no admin session, count only general inbox messages not sent by any admin
-        // This is a safety fallback, but ideally adminId should always exist
-        const { count: unreadCount, error: unreadError } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("is_read", false)
-          .is("recipient_id", null);
-
-        if (unreadError) {
-          console.error("Error counting unread messages:", unreadError);
-        } else {
-          unreadMessages = unreadCount || 0;
-        }
+        console.warn("⚠️ No adminId found, cannot count unread messages");
       }
 
       const activeTrips = activeTripsResult.count || 0;
@@ -217,7 +207,7 @@ export default function AdminDashboard() {
           .order("updated_at", { ascending: false })
           .limit(5),
         
-        // Recent messages (last 5)
+        // Recent messages (only messages TO admin or general inbox, NOT sent by admin)
         supabase
           .from("messages")
           .select(`
@@ -225,8 +215,12 @@ export default function AdminDashboard() {
             content,
             created_at,
             sender_id,
+            recipient_id,
+            is_read,
             users:sender_id(full_name, email)
           `)
+          .or(`recipient_id.is.null,recipient_id.eq.${adminId}`) // To general inbox OR to admin
+          .neq("sender_id", adminId) // Exclude messages sent by admin
           .order("created_at", { ascending: false })
           .limit(5),
         
@@ -351,33 +345,6 @@ export default function AdminDashboard() {
       })));
       
       setRecentActivity(recentActivities);
-
-      if (error) {
-        console.error("❌ ERROR DASHBOARD (Notifications Query):", error);
-        console.error("   Error Code:", error.code);
-        console.error("   Error Message:", error.message);
-        console.error("   Error Details:", error.details);
-        console.error("   Error Hint:", error.hint);
-        
-        setRecentActivity([]);
-        return;
-      }
-
-      if (!Array.isArray(notifications)) {
-        console.warn("⚠️ Notifications data is not an array:", notifications);
-        setRecentActivity([]);
-        return;
-      }
-
-      // If no notifications, set empty array and return early
-      if (notifications.length === 0) {
-        console.log("ℹ️ No notifications found in database");
-        setRecentActivity([]);
-        return;
-      }
-
-      console.log("📋 Raw notifications received:", notifications.length, "items");
-      console.log("📋 First notification sample:", notifications[0]);
 
       // Enrich notifications with user names if missing (with error handling)
       const enrichedNotifications = await Promise.allSettled(
