@@ -558,12 +558,13 @@ export default function DashboardPage() {
                 </Link>
               );
             })}
-          
-          {/* Review & Reputation Module */}
-          <ReviewDialog 
-            className="block h-full animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both"
-            style={{ animationDelay: "500ms" }}
-          />
+            
+            {/* Review & Reputation Module */}
+            <ReviewDialog 
+              className="block h-full animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both"
+              style={{ animationDelay: "500ms" }}
+            />
+          </div>
         </div>
       </div>
     </div>
