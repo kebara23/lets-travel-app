@@ -373,6 +373,19 @@ export default function SOSCenterPage() {
                   
                   console.log("✅ Selected alert updated:", alert.id);
                 };
+
+                const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  console.log("👆 Touch ended on card:", alert.id);
+                  
+                  // Call the click handler
+                  handleCardClick(e);
+                  
+                  // Remove visual feedback
+                  e.currentTarget.classList.remove("scale-[0.98]");
+                };
                 
                 return (
                   <Card
@@ -382,10 +395,7 @@ export default function SOSCenterPage() {
                       // Visual feedback on touch start
                       e.currentTarget.classList.add("scale-[0.98]");
                     }}
-                    onTouchEnd={(e) => {
-                      // Remove visual feedback
-                      e.currentTarget.classList.remove("scale-[0.98]");
-                    }}
+                    onTouchEnd={handleTouchEnd}
                     className={cn(
                       "cursor-pointer transition-all select-none",
                       "active:scale-[0.98] active:bg-red-50/70",
@@ -446,8 +456,8 @@ export default function SOSCenterPage() {
 
         {/* Right Column - Map and Actions */}
         <div className={cn(
-          "flex-1 flex flex-col overflow-hidden",
-          !selectedAlert && "hidden lg:flex" // Hide details on mobile when no alert selected
+          "flex-1 flex flex-col overflow-hidden w-full",
+          !selectedAlert ? "hidden lg:flex" : "flex" // Show details when alert is selected (mobile or desktop)
         )}>
           {selectedAlert ? (
             <>
