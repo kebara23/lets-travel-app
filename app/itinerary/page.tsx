@@ -253,7 +253,7 @@ export default function ItineraryPage() {
     : "Your Journey";
 
   return (
-    <div className="min-h-screen bg-background p-4 lg:p-8">
+    <div className="min-h-screen bg-background p-4 lg:p-8 pb-24 lg:pb-8">
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
