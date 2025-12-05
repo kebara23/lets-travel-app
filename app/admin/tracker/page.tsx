@@ -60,7 +60,7 @@ export default function AdminTrackerPage() {
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   
-  // Only fetch data on client side
+  // Only fetch data on client side - call hook unconditionally to maintain hook order
   const { activeUsers, loading, error, refetch } = useActiveUserLocations();
 
   // Ensure we're on the client before using Leaflet or any browser APIs
@@ -69,28 +69,6 @@ export default function AdminTrackerPage() {
       setIsClient(true);
     }
   }, []);
-
-  // Early return during SSR
-  if (!isClient) {
-    return (
-      <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-slate-50">
-        <div className="p-6 bg-white border-b shadow-sm z-10">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 font-body">Live Tracker</h1>
-              <p className="text-sm text-slate-500 font-body">Monitor active client locations in real-time</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 relative bg-slate-200">
-          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-8">
-            <Loader2 className="w-12 h-12 mb-4 animate-spin opacity-50" />
-            <p className="font-body">Loading...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Inject custom marker styles
   useEffect(() => {

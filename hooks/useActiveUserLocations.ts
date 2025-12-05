@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export type ActiveUser = {
@@ -15,46 +15,9 @@ export function useActiveUserLocations() {
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    // Only fetch on client side
-    if (typeof window === "undefined") {
-      setLoading(false);
-      return;
-    }
-
-    fetchActiveUsers();
-
-    // Set up realtime subscription
-    const channel = supabase
-      .channel("active-user-locations")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "device_tracking",
-        },
-        () => {
-          // Refetch when tracking data changes
-          fetchActiveUsers();
-        }
-      )
-      .subscribe();
-
-    // Poll every 30 seconds as backup
-    const interval = setInterval(fetchActiveUsers, 30000);
-
-    return () => {
-      if (typeof window !== "undefined") {
-        supabase.removeChannel(channel);
-        clearInterval(interval);
-      }
-    };
-  }, []);
-
-  async function fetchActiveUsers() {
+  const fetchActiveUsers = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -124,7 +87,44 @@ export function useActiveUserLocations() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [supabase]);
+
+  useEffect(() => {
+    // Only fetch on client side
+    if (typeof window === "undefined") {
+      setLoading(false);
+      return;
+    }
+
+    fetchActiveUsers();
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel("active-user-locations")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "device_tracking",
+        },
+        () => {
+          // Refetch when tracking data changes
+          fetchActiveUsers();
+        }
+      )
+      .subscribe();
+
+    // Poll every 30 seconds as backup
+    const interval = setInterval(fetchActiveUsers, 30000);
+
+    return () => {
+      if (typeof window !== "undefined") {
+        supabase.removeChannel(channel);
+        clearInterval(interval);
+      }
+    };
+  }, [fetchActiveUsers, supabase]);
 
   return { activeUsers, loading, error, refetch: fetchActiveUsers };
 }
