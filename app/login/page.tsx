@@ -107,8 +107,8 @@ export default function LoginPage() {
           console.log("✅ Valid session found, redirecting to dashboard");
           hasRedirected = true;
           setIsCheckingSession(false);
-          // User is already logged in, redirect to dashboard
-          router.push("/dashboard");
+          // User is already logged in, redirect to dashboard using window.location to prevent loops
+          window.location.href = "/dashboard";
         } else {
           if (isMounted && !hasLoggedIn) {
             console.log("ℹ️ No valid session found, showing login form");
