@@ -146,12 +146,16 @@ export default function LoginPage() {
   };
 
   async function onSubmit(data: LoginFormValues) {
+    console.log("🚀 onSubmit called with data:", { email: data.email, passwordLength: data.password?.length });
+    
     // Validate form data
     if (!validateForm(data)) {
+      console.log("❌ Form validation failed");
       return;
     }
 
     if (!supabase) {
+      console.error("❌ Supabase client not initialized");
       toast({
         variant: "destructive",
         title: "Configuration Error",
@@ -160,6 +164,7 @@ export default function LoginPage() {
       return;
     }
     
+    console.log("✅ Starting login process...");
     setIsLoading(true);
     try {
       const { data: authData, error } = await supabase.auth.signInWithPassword({
