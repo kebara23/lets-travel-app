@@ -199,53 +199,96 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Enrich notifications with user names if missing
-      const enrichedNotifications = await Promise.all(
+      // If no notifications, set empty array and return early
+      if (notifications.length === 0) {
+        console.log("ℹ️ No notifications found in database");
+        setRecentActivity([]);
+        return;
+      }
+
+      console.log("📋 Raw notifications received:", notifications.length, "items");
+      console.log("📋 First notification sample:", notifications[0]);
+
+      // Enrich notifications with user names if missing (with error handling)
+      const enrichedNotifications = await Promise.allSettled(
         notifications.map(async (notification) => {
           let actorName = notification.actor_name;
           let targetName = notification.target_user_name;
 
-          // If actor_name is missing, try to get it from the current session (admin)
-          if (!actorName) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.id) {
-              const { data: adminUser } = await supabase
-                .from("users")
-                .select("full_name")
-                .eq("id", session.user.id)
-                .single();
-              actorName = adminUser?.full_name || "Admin";
+          try {
+            // If actor_name is missing, try to get it from the current session (admin)
+            if (!actorName) {
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user?.id) {
+                  const { data: adminUser, error: adminError } = await supabase
+                    .from("users")
+                    .select("full_name")
+                    .eq("id", session.user.id)
+                    .single();
+                  
+                  if (!adminError && adminUser) {
+                    actorName = adminUser.full_name;
+                  }
+                }
+              } catch (e) {
+                console.warn("⚠️ Failed to fetch admin name:", e);
+              }
             }
-          }
 
-          // If target_user_name is missing and we have resource_id for CLIENT, fetch it
-          if (!targetName && notification.resource_type === "CLIENT" && notification.resource_id) {
-            const { data: clientUser } = await supabase
-              .from("users")
-              .select("full_name")
-              .eq("id", notification.resource_id)
-              .single();
-            targetName = clientUser?.full_name || null;
-          }
+            // If target_user_name is missing and we have resource_id for CLIENT, fetch it
+            if (!targetName && notification.resource_type === "CLIENT" && notification.resource_id) {
+              try {
+                const { data: clientUser, error: clientError } = await supabase
+                  .from("users")
+                  .select("full_name")
+                  .eq("id", notification.resource_id)
+                  .single();
+                
+                if (!clientError && clientUser) {
+                  targetName = clientUser.full_name;
+                }
+              } catch (e) {
+                console.warn("⚠️ Failed to fetch client name from resource_id:", e);
+              }
+            }
 
-          // If target_user_name is missing and we have entity_id for CLIENT, fetch it
-          if (!targetName && notification.entity_type?.includes("CLIENT") && notification.entity_id) {
-            const { data: clientUser } = await supabase
-              .from("users")
-              .select("full_name")
-              .eq("id", notification.entity_id)
-              .single();
-            targetName = clientUser?.full_name || null;
-          }
+            // If target_user_name is missing and we have entity_id for CLIENT, fetch it
+            if (!targetName && notification.entity_type?.includes("CLIENT") && notification.entity_id) {
+              try {
+                const { data: clientUser, error: clientError } = await supabase
+                  .from("users")
+                  .select("full_name")
+                  .eq("id", notification.entity_id)
+                  .single();
+                
+                if (!clientError && clientUser) {
+                  targetName = clientUser.full_name;
+                }
+              } catch (e) {
+                console.warn("⚠️ Failed to fetch client name from entity_id:", e);
+              }
+            }
 
-          // If target_user_name is missing and we have user_id (notification recipient), fetch it
-          if (!targetName && notification.user_id) {
-            const { data: targetUser } = await supabase
-              .from("users")
-              .select("full_name")
-              .eq("id", notification.user_id)
-              .single();
-            targetName = targetUser?.full_name || null;
+            // If target_user_name is missing and we have user_id (notification recipient), fetch it
+            if (!targetName && notification.user_id) {
+              try {
+                const { data: targetUser, error: targetError } = await supabase
+                  .from("users")
+                  .select("full_name")
+                  .eq("id", notification.user_id)
+                  .single();
+                
+                if (!targetError && targetUser) {
+                  targetName = targetUser.full_name;
+                }
+              } catch (e) {
+                console.warn("⚠️ Failed to fetch target user name:", e);
+              }
+            }
+          } catch (error) {
+            console.error("❌ Error enriching notification:", error);
+            // Continue with defaults even if enrichment fails
           }
 
           return {
@@ -256,17 +299,23 @@ export default function AdminDashboard() {
         })
       );
 
-      console.log("✅ Recent activity loaded:", enrichedNotifications.length, "items");
-      console.log("📋 Sample enriched activity data:", enrichedNotifications[0] ? {
-        id: enrichedNotifications[0].id,
-        type: enrichedNotifications[0].type,
-        actor_name: enrichedNotifications[0].actor_name,
-        target_user_name: enrichedNotifications[0].target_user_name,
-        resource_id: enrichedNotifications[0].resource_id,
-        resource_type: enrichedNotifications[0].resource_type,
+      // Filter out failed promises and extract values
+      const successfulNotifications = enrichedNotifications
+        .filter((result): result is PromiseFulfilledResult<any> => result.status === "fulfilled")
+        .map((result) => result.value);
+
+      console.log("✅ Recent activity loaded:", successfulNotifications.length, "items (out of", notifications.length, "total)");
+      console.log("📋 Sample enriched activity data:", successfulNotifications[0] ? {
+        id: successfulNotifications[0].id,
+        type: successfulNotifications[0].type,
+        actor_name: successfulNotifications[0].actor_name,
+        target_user_name: successfulNotifications[0].target_user_name,
+        resource_id: successfulNotifications[0].resource_id,
+        resource_type: successfulNotifications[0].resource_type,
       } : "No data");
       
-      setRecentActivity(enrichedNotifications);
+      // Always set the notifications, even if enrichment partially failed
+      setRecentActivity(successfulNotifications.length > 0 ? successfulNotifications : notifications);
     } catch (error: any) {
       console.error("💥 ERROR DASHBOARD (Exception in fetchRecentActivity):", error);
       console.error("   Error Type:", error?.constructor?.name);
