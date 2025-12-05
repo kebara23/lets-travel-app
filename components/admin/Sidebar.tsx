@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   LogOut,
   User,
+  Lightbulb,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,11 @@ const menuItems = [
     href: "/admin/sos",
     variant: "destructive" as const,
   },
+  {
+    title: "Innovation Hub",
+    icon: Lightbulb,
+    href: "/admin/brainstorming",
+  },
 ];
 
 export function Sidebar() {
@@ -85,9 +91,9 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex h-screen w-[250px] flex-col bg-slate-900 border-r border-slate-800">
+    <div className="flex h-screen w-[250px] flex-col bg-slate-900 border-r border-slate-800 sticky top-0">
       {/* Header */}
-      <div className="flex h-16 items-center border-b border-slate-800 px-6">
+      <div className="flex h-16 items-center border-b border-slate-800 px-6 shrink-0">
         <h1 className="text-xl font-bold text-white font-body">LETS Admin</h1>
       </div>
 
@@ -117,7 +123,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer - User Profile & Logout */}
-      <div className="border-t border-slate-800 p-4 space-y-2">
+      <div className="border-t border-slate-800 p-4 space-y-2 shrink-0">
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/50">
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-blue-600 text-white text-xs">

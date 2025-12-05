@@ -13,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plane, Users, MessageCircle, AlertTriangle, Bell, Calendar, MessageSquare, Siren } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Plane, Users, MessageCircle, AlertTriangle, Bell, Calendar, MessageSquare, Siren, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [recentActivity, setRecentActivity] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const channelRef = useRef<any>(null);
 
   // Fetch all KPIs simultaneously
@@ -195,6 +197,39 @@ export default function AdminDashboard() {
     }
   }
 
+  // Combined fetch function for dashboard data
+  async function fetchDashboardData() {
+    await Promise.allSettled([
+      fetchKPIs().catch((err) => {
+        console.error("❌ KPIs fetch failed:", err);
+      }),
+      fetchRecentActivity().catch((err) => {
+        console.error("❌ Recent Activity fetch failed:", err);
+      }),
+    ]);
+  }
+
+  // Manual refresh handler
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      await fetchDashboardData();
+      toast({
+        title: "Data Updated",
+        description: "Dashboard data has been refreshed successfully.",
+      });
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to refresh data. Please try again.",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   // Format time ago
   function formatTimeAgo(dateString: string): string {
     const now = new Date();
@@ -264,40 +299,56 @@ export default function AdminDashboard() {
         "postgres_changes",
         { event: "*", schema: "public", table: "trips" },
         () => {
-          console.log("🔄 Trips updated, refetching KPIs...");
-          fetchKPIs();
+          console.log("🔄 Trips updated, refetching dashboard data...");
+          fetchDashboardData();
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "users" },
         () => {
-          console.log("🔄 Users updated, refetching KPIs...");
-          fetchKPIs();
+          console.log("🔄 Users updated, refetching dashboard data...");
+          fetchDashboardData();
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         () => {
-          console.log("🔄 Messages updated, refetching KPIs...");
-          fetchKPIs();
+          console.log("🔄 Messages updated, refetching dashboard data...");
+          fetchDashboardData();
         }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sos_alerts" },
         () => {
-          console.log("🔄 SOS alerts updated, refetching KPIs...");
-          fetchKPIs();
+          console.log("🔄 SOS alerts updated, refetching dashboard data...");
+          fetchDashboardData();
         }
       )
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications" },
         () => {
-          console.log("🔄 New notification, refetching activity...");
-          fetchRecentActivity();
+          console.log("🔄 New notification (INSERT), refetching dashboard data...");
+          fetchDashboardData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications" },
+        () => {
+          console.log("🔄 Notification updated (UPDATE), refetching dashboard data...");
+          fetchDashboardData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notifications" },
+        () => {
+          console.log("🔄 Notification deleted (DELETE), refetching dashboard data...");
+          fetchDashboardData();
         }
       )
       .subscribe((status) => {
@@ -319,9 +370,26 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 font-body">Dashboard</h1>
-        <p className="text-slate-600 mt-1 font-body">Welcome back, here&apos;s what&apos;s happening today.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 font-body">Dashboard</h1>
+          <p className="text-slate-600 mt-1 font-body">Welcome back, here&apos;s what&apos;s happening today.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="font-body"
+        >
+          <RefreshCcw
+            className={cn(
+              "h-4 w-4 mr-2",
+              isRefreshing && "animate-spin"
+            )}
+          />
+          Refresh Data
+        </Button>
       </div>
 
       {/* KPIs Grid */}

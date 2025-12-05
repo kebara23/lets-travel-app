@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NotificationBell } from "@/components/ui/NotificationBell";
 
 export default function AdminLayout({
   children,
@@ -120,15 +119,12 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-100 font-sans text-slate-900">
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-100">
         {/* Admin Header */}
         <header className="h-16 border-b bg-white px-8 flex items-center justify-between shadow-sm sticky top-0 z-10">
           <div className="text-sm text-muted-foreground">Admin Workspace</div>
-          <div className="flex items-center gap-4">
-            <NotificationBell />
-          </div>
         </header>
         <div className="flex-1 overflow-y-auto p-8">
           {children}
