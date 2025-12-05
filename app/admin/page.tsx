@@ -14,10 +14,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plane, Users, MessageCircle, AlertTriangle, Bell, Calendar, MessageSquare, Siren, RefreshCcw } from "lucide-react";
+import { Plane, Users, MessageCircle, AlertTriangle, Bell, Calendar, MessageSquare, Siren, RefreshCcw, FileText, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { getActivityLink, getNotificationIcon } from "@/components/admin/ActivityUtils";
+import { useRouter } from "next/navigation";
 
 type KPI = {
   title: string;
@@ -33,9 +35,12 @@ type Notification = {
   title: string;
   message: string;
   created_at: string;
+  entity_type?: string;
+  entity_id?: string;
 };
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const supabase = createClient();
   const { toast } = useToast();
   const [kpis, setKpis] = useState<KPI[]>([]);
@@ -246,20 +251,6 @@ export default function AdminDashboard() {
       day: "numeric",
       year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
     });
-  }
-
-  // Get icon for notification type
-  function getNotificationIcon(type: string) {
-    switch (type) {
-      case "activity_reminder":
-        return Calendar;
-      case "message":
-        return MessageSquare;
-      case "sos":
-        return Siren;
-      default:
-        return Bell;
-    }
   }
 
   // Initial fetch (Tolerante a fallos individuales)
@@ -500,20 +491,48 @@ export default function AdminDashboard() {
               <TableBody>
                 {recentActivity.map((activity) => {
                   const Icon = getNotificationIcon(activity.type);
+                  // Determine link based on available metadata, or fallback to generic type
+                  // Assuming 'type' might be the entity type if entity_type is missing for backward compatibility
+                  // But prioritizing entity_type if available.
+                  const entityType = activity.entity_type || activity.type; 
+                  // Some existing notifications might not have entity_type/id, so we handle gracefully.
+                  const linkUrl = getActivityLink(entityType, activity.entity_id || null);
+                  const isClickable = linkUrl !== "#";
+
                   return (
-                    <TableRow key={activity.id} className="border-slate-200">
+                    <TableRow 
+                      key={activity.id} 
+                      className={cn(
+                        "border-slate-200 transition-colors",
+                        isClickable && "hover:bg-slate-50 cursor-pointer group"
+                      )}
+                      onClick={(e) => {
+                        if (isClickable) {
+                          e.stopPropagation();
+                          console.log("Clicked item:", entityType, activity.entity_id || "No ID");
+                          router.push(linkUrl);
+                        }
+                      }}
+                    >
                       <TableCell>
                         <div className="flex items-center justify-center">
                           <Icon className="h-5 w-5 text-slate-600" />
                         </div>
                       </TableCell>
                       <TableCell className="font-medium font-body">
-                        {activity.title}
+                        {isClickable ? (
+                          <span className="flex items-center gap-2 group-hover:text-blue-600 transition-colors">
+                            {activity.title}
+                            <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
+                          </span>
+                        ) : (
+                          activity.title
+                        )}
                       </TableCell>
                       <TableCell className="font-body text-slate-600">
                         {activity.message}
                       </TableCell>
-                      <TableCell className="font-body text-slate-500 text-sm">
+                      <TableCell className="font-body text-slate-500 text-sm whitespace-nowrap">
                         {formatTimeAgo(activity.created_at)}
                       </TableCell>
                     </TableRow>
