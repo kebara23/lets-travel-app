@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import type L from "leaflet";
 
-// Componente auxiliar para recentrar el mapa cuando cambian los puntos
+// Helper to recenter map
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   useEffect(() => {
@@ -19,7 +18,7 @@ type MapProps = {
     lat: number;
     lng: number;
     popupText: string;
-    icon?: any; // Aceptamos iconos personalizados (L.DivIcon | L.Icon)
+    icon?: any;
   }>;
   center: [number, number];
   zoom: number;
@@ -27,7 +26,6 @@ type MapProps = {
   style?: React.CSSProperties;
 };
 
-// Enhanced Popup component with HTML support
 function EnhancedPopup({ content }: { content: string }) {
   return (
     <Popup>
@@ -36,50 +34,45 @@ function EnhancedPopup({ content }: { content: string }) {
   );
 }
 
-// Exportamos como "Map" (Named Export) para que coincida con el import dinámico
 export function Map({ markers, center, zoom, className, style }: MapProps) {
   const [isMounted, setIsMounted] = useState(false);
-  const [iconsReady, setIconsReady] = useState(false);
+  const [LeafletLib, setLeafletLib] = useState<any>(null);
 
-  // Estado de montaje: solo se ejecuta una vez cuando el componente se monta en el cliente
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    setIsMounted(true);
-
-    // Fix para iconos de Leaflet en Next.js (si no, no se ven los pines)
-    // Importar Leaflet dinámicamente solo en el cliente
-    const initIcons = async () => {
+    const initLeaflet = async () => {
       try {
-        const leaflet = await import("leaflet");
-        const L = leaflet.default as typeof import("leaflet");
+        const L = await import("leaflet");
         
-        if (L && L.Icon && L.Icon.Default) {
-          // @ts-ignore
-          delete L.Icon.Default.prototype._getIconUrl;
-          L.Icon.Default.mergeOptions({
-            iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-            iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-            shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-          });
-          setIconsReady(true);
-        } else {
-          setIconsReady(true);
-        }
+        // Fix default icons
+        // @ts-ignore
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+        });
+
+        setLeafletLib(L);
+        setIsMounted(true);
       } catch (error) {
-        console.error("Error initializing Leaflet icons:", error);
-        // Continuar de todos modos, los iconos por defecto deberían funcionar
-        setIconsReady(true);
+        console.error("Error loading Leaflet:", error);
       }
     };
 
-    initIcons();
+    initLeaflet();
   }, []);
 
-  // Renderizado condicional: solo renderiza el MapContainer cuando el componente está montado y los iconos están listos
-  if (!isMounted || !iconsReady) {
+  // Create default icon once Leaflet is loaded
+  const defaultIcon = useMemo(() => {
+    if (!LeafletLib) return null;
+    return new LeafletLib.Icon.Default();
+  }, [LeafletLib]);
+
+  if (!isMounted || !LeafletLib) {
     return (
-      <div className={className || "h-full w-full z-0"} style={style || { height: "100%", width: "100%" }}>
+      <div className={className || "h-full w-full"} style={style || { height: "100%", width: "100%" }}>
         <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
           <p className="text-slate-400">Loading Map...</p>
         </div>
@@ -92,7 +85,7 @@ export function Map({ markers, center, zoom, className, style }: MapProps) {
       center={center}
       zoom={zoom}
       scrollWheelZoom={true}
-      className={className || "h-full w-full z-0"}
+      className={className || "h-full w-full"}
       style={style || { height: "100%", width: "100%" }}
     >
       <TileLayer
@@ -106,7 +99,7 @@ export function Map({ markers, center, zoom, className, style }: MapProps) {
         <Marker 
           key={idx} 
           position={[marker.lat, marker.lng]}
-          icon={marker.icon} // Si es undefined, usa el default
+          icon={marker.icon || defaultIcon} 
         >
           <EnhancedPopup content={marker.popupText} />
         </Marker>

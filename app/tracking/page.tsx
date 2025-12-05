@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { Switch } from "@/components/ui/switch";
@@ -188,6 +188,18 @@ export default function TrackingPage() {
     };
   }, []);
 
+  // Memoize markers to prevent unnecessary re-renders in Map component
+  const markers = useMemo(() => {
+    if (!position) return [];
+    return [
+      {
+        lat: position.lat,
+        lng: position.lng,
+        popupText: "Your current location",
+      },
+    ];
+  }, [position]);
+
   return (
     <div className="min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -245,13 +257,7 @@ export default function TrackingPage() {
             <div className="h-[600px] w-full">
               {position ? (
                 <Map
-                  markers={[
-                    {
-                      lat: position.lat,
-                      lng: position.lng,
-                      popupText: "Your current location",
-                    },
-                  ]}
+                  markers={markers}
                   center={[position.lat, position.lng]}
                   zoom={15}
                 />
