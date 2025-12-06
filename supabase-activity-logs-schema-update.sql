@@ -46,5 +46,3 @@ INSERT INTO public.notifications (
 );
 */
 
-
-

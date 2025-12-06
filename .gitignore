@@ -40,4 +40,3 @@ next-env.d.ts
 # /public/icons/*.png
 
 next.config.js
-components/debug/

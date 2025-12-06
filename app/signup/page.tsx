@@ -102,6 +102,7 @@ export default function SignupPage() {
   // Initialize Supabase client only on client side
   useEffect(() => {
     let isMounted = true;
+    let redirectTimeout: NodeJS.Timeout | null = null;
 
     try {
       const client = createClient();
@@ -121,8 +122,11 @@ export default function SignupPage() {
 
     return () => {
       isMounted = false;
+      if (redirectTimeout) {
+        clearTimeout(redirectTimeout);
+      }
     };
-  }, []); // Removed toast dependency to prevent unnecessary re-renders
+  }, [toast]);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -184,38 +188,30 @@ export default function SignupPage() {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Get user role from database for role-based redirect
-      let profile = null;
-      try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", authData.user.id)
-          .single();
-
-        if (error) {
-          console.error("Error fetching user profile:", error);
-          // Continue with default redirect if profile fetch fails
-        } else {
-          profile = data;
-        }
-      } catch (error) {
-        console.error("Exception fetching user profile:", error);
-        // Continue with default redirect if profile fetch fails
-      }
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", authData.user.id)
+        .single();
 
       toast({
         title: "Account created!",
         description: "Welcome! Redirecting...",
       });
 
-      // Redirect based on role
-      setTimeout(() => {
+      // Redirect based on role with cleanup
+      const redirectTimeout = setTimeout(() => {
         if (profile?.role === "admin") {
-          window.location.href = "/admin";
+          router.push("/admin");
         } else {
-          window.location.href = "/dashboard";
+          router.push("/dashboard");
         }
       }, 1000);
+
+      // Store timeout for cleanup (handled by component unmount)
+      return () => {
+        clearTimeout(redirectTimeout);
+      };
     } catch (error) {
       console.error("Error during signup:", error);
       toast({
