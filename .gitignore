@@ -39,4 +39,7 @@ next-env.d.ts
 # Uncomment if you don't want to commit icons
 # /public/icons/*.png
 
+# Next.js config: Ignore CommonJS version (next.config.js) - we use next.config.mjs (ES modules)
+# This prevents conflicts when tools try to create next.config.js automatically
+# Only next.config.mjs is tracked in git as the single source of truth
 next.config.js
