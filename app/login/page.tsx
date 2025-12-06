@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -33,7 +32,6 @@ export default function LoginPage() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [hasLoggedIn, setHasLoggedIn] = useState(false); // Prevent session check after successful login
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
-  const router = useRouter();
   const { toast } = useToast();
 
   // Initialize Supabase client only on client side
@@ -67,7 +65,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, [toast]);
+  }, []); // Removed toast dependency to prevent unnecessary re-renders
 
   // Check if user is already logged in (non-blocking)
   // Use getUser() instead of getSession() to verify the session is actually valid
@@ -130,7 +128,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, [router, supabase, hasLoggedIn]);
+  }, [supabase, hasLoggedIn]); // Removed router from dependencies to prevent unnecessary re-renders
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -305,8 +303,10 @@ export default function LoginPage() {
                 title: "Welcome back!",
                 description: "You have been successfully logged in.",
               });
-              router.push("/admin");
+              setHasLoggedIn(true);
               setIsLoading(false);
+              // Use window.location.href for consistent redirect behavior
+              window.location.href = "/admin";
               return;
             }
           }

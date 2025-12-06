@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ export default function ItineraryPage() {
     return () => {
       isMounted = false;
     };
-  }, [supabase, toast, router]);
+  }, [supabase]); // Removed toast and router from dependencies to prevent unnecessary re-renders
 
   const handleToggleComplete = async (id: string, is_completed: boolean) => {
     setIsUpdating(true);
