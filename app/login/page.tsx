@@ -67,7 +67,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, [toast]);
+  }, []); // Removed toast dependency to prevent unnecessary re-renders
 
   // Check if user is already logged in (non-blocking)
   // Use getUser() instead of getSession() to verify the session is actually valid

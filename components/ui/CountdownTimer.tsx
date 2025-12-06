@@ -55,7 +55,9 @@ export function CountdownTimer({ targetDate, on24Hours, on1Hour }: CountdownTime
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [targetDate, hasNotified24h, hasNotified1h, on24Hours, on1Hour]);
+    // Removed on24Hours and on1Hour from dependencies to prevent unnecessary re-renders
+    // These callbacks are stable and don't need to be in dependencies
+  }, [targetDate, hasNotified24h, hasNotified1h]);
 
   return (
     <div className="flex items-center gap-2 text-sm font-medium font-body">

@@ -24,14 +24,36 @@ export default function SOSPage() {
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
-  const supabase = createClient();
+  const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
+
+  // Initialize Supabase client
+  useEffect(() => {
+    let isMounted = true;
+
+    try {
+      const client = createClient();
+      if (isMounted) {
+        setSupabase(client);
+      }
+    } catch (error) {
+      console.error("Failed to initialize Supabase client:", error);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Get current user
   useEffect(() => {
+    if (!supabase) return;
+
+    let isMounted = true;
+
     async function getCurrentUser() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
+        if (isMounted && session?.user) {
           setUserId(session.user.id);
         }
       } catch (error) {
@@ -39,6 +61,10 @@ export default function SOSPage() {
       }
     }
     getCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
   }, [supabase]);
 
   // Hold button logic
@@ -126,7 +152,7 @@ export default function SOSPage() {
       }
 
       // 3. Save to Supabase
-      if (userId) {
+      if (userId && supabase) {
         try {
           const { error: dbError } = await supabase
             .from("sos_alerts")
