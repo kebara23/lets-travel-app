@@ -166,6 +166,94 @@ export default function DashboardPage() {
     };
   }, [router, supabase]);
 
+  // Realtime subscription for trips and itinerary_items updates
+  useEffect(() => {
+    if (!supabase || !user?.id) return;
+
+    console.log("🔔 Setting up Realtime subscriptions for dashboard updates");
+
+    // Subscribe to trips changes (INSERT, UPDATE, DELETE)
+    const tripsChannel = supabase
+      .channel(`dashboard_trips_${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: "public",
+          table: "trips",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log("🔔 Trip changed (Realtime):", payload.eventType, payload);
+          // Refresh trips data when any change occurs
+          if (user.id) {
+            fetchUserTrip(supabase, user.id);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("🔔 Trips subscription status:", status);
+      });
+
+    // Subscribe to itinerary_items changes (INSERT, UPDATE, DELETE)
+    // We need to listen to all itinerary_items that belong to trips of this user
+    // Since we can't filter by user_id directly on itinerary_items, we'll listen to all changes
+    // and filter in the callback
+    const itineraryChannel = supabase
+      .channel(`dashboard_itinerary_${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: "public",
+          table: "itinerary_items",
+        },
+        async (payload) => {
+          console.log("🔔 Itinerary item changed (Realtime):", payload.eventType, payload);
+          
+          // Check if this itinerary item belongs to a trip of this user
+          const newRecord = payload.new as { trip_id?: string } | null;
+          const oldRecord = payload.old as { trip_id?: string } | null;
+          const tripId = newRecord?.trip_id || oldRecord?.trip_id;
+          
+          if (tripId && user.id) {
+            const { data: tripData } = await supabase
+              .from("trips")
+              .select("user_id")
+              .eq("id", tripId)
+              .single();
+            
+            if (tripData && tripData.user_id === user.id) {
+              console.log("🔔 Itinerary item belongs to user's trip, refreshing...");
+              // Refresh trips data when itinerary item changes
+              fetchUserTrip(supabase, user.id);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("🔔 Itinerary subscription status:", status);
+      });
+
+    // Also refresh data when page becomes visible (user returns to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && user?.id) {
+        console.log("🔔 Page became visible, refreshing trips data");
+        fetchUserTrip(supabase, user.id);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup subscriptions and listeners on unmount
+    return () => {
+      console.log("🔔 Cleaning up Realtime subscriptions");
+      supabase.removeChannel(tripsChannel);
+      supabase.removeChannel(itineraryChannel);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [supabase, user?.id]);
+
   async function fetchUserTrip(supabaseClient: ReturnType<typeof createClient>, userId: string) {
     // Validate userId before query
     if (!userId || typeof userId !== "string" || userId.trim() === "") {
