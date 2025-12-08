@@ -41,6 +41,39 @@ export default function TrackingPage() {
   
   const watchIdRef = useRef<number | null>(null);
 
+  // Function to restore state from DB
+  const restoreStateFromDB = useCallback(async () => {
+    if (!userId) return;
+    
+    try {
+      const { data: trackingData, error } = await supabase
+        .from("device_tracking")
+        .select("is_active, lat, lng")
+        .eq("user_id", userId)
+        .maybeSingle();
+        
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error fetching tracking data:", error);
+        return;
+      }
+        
+      if (trackingData) {
+        const isActive = !!trackingData.is_active;
+        setIsSharing(isActive);
+        if (isActive && trackingData.lat && trackingData.lng) {
+          setPosition({ lat: trackingData.lat, lng: trackingData.lng });
+        } else if (!isActive) {
+          setPosition(null);
+        }
+      } else {
+        setIsSharing(false);
+        setPosition(null);
+      }
+    } catch (error) {
+      console.error("Error restoring state:", error);
+    }
+  }, [userId, supabase]);
+
   // Get current user and initial tracking state
   useEffect(() => {
     async function initialize() {
@@ -48,20 +81,6 @@ export default function TrackingPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUserId(session.user.id);
-          
-          // Check persistent state in DB
-          const { data: trackingData } = await supabase
-            .from("device_tracking")
-            .select("is_active, lat, lng")
-            .eq("user_id", session.user.id)
-            .single();
-            
-          if (trackingData) {
-            setIsSharing(!!trackingData.is_active); // Ensure boolean
-            if (trackingData.lat && trackingData.lng) {
-              setPosition({ lat: trackingData.lat, lng: trackingData.lng });
-            }
-          }
         }
       } catch (error) {
         console.error("Error initializing tracking:", error);
@@ -71,6 +90,28 @@ export default function TrackingPage() {
     }
     initialize();
   }, [supabase]);
+
+  // Restore state when userId is available
+  useEffect(() => {
+    if (userId) {
+      restoreStateFromDB();
+    }
+  }, [userId, restoreStateFromDB]);
+
+  // Restore state when page becomes visible (user returns to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && userId) {
+        console.log("Page became visible, restoring tracking state");
+        restoreStateFromDB();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [userId, restoreStateFromDB]);
 
   // Effect to handle Geolocation API based on isSharing state
   // This ensures the browser API matches our React/DB state
@@ -110,7 +151,7 @@ export default function TrackingPage() {
           
           setPosition(newPosition);
           
-          // Background save (fire and forget)
+          // Background save (fire and forget) - ensure is_active is always true when sharing
           if (userId) {
             supabase.from("device_tracking").upsert({
               user_id: userId,
@@ -118,8 +159,12 @@ export default function TrackingPage() {
               lng: newPosition.lng,
               is_active: true,
               updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'user_id'
             }).then(({ error }) => {
-              if (error) console.error("Background save error:", error);
+              if (error) {
+                console.error("Background save error:", error);
+              }
             });
           }
         },
@@ -164,25 +209,40 @@ export default function TrackingPage() {
       // If turning on, try to get current position immediately to save with it
       if (newState && "geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => {
+          async (pos) => {
             updateData.lat = pos.coords.latitude;
             updateData.lng = pos.coords.longitude;
             setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
             
-            // Perform upsert with position
-            supabase.from("device_tracking").upsert(updateData).then(({ error }) => {
-               if (error) throw error;
+            // Perform upsert with position - await to ensure it completes
+            const { error } = await supabase.from("device_tracking").upsert(updateData, {
+              onConflict: 'user_id'
             });
+            if (error) {
+              console.error("Error saving tracking data:", error);
+              throw error;
+            }
           },
-          () => {
+          async (error) => {
+            console.error("Error getting position:", error);
             // On error getting immediate position, just save status
-            supabase.from("device_tracking").upsert(updateData);
+            const { error: dbError } = await supabase.from("device_tracking").upsert(updateData, {
+              onConflict: 'user_id'
+            });
+            if (dbError) {
+              console.error("Error saving tracking status:", dbError);
+              throw dbError;
+            }
           },
           { timeout: 5000 }
         );
       } else {
+        // Turning off - clear position and save status
+        setPosition(null);
         // Just save status change
-        const { error } = await supabase.from("device_tracking").upsert(updateData);
+        const { error } = await supabase.from("device_tracking").upsert(updateData, {
+          onConflict: 'user_id'
+        });
         if (error) throw error;
       }
 

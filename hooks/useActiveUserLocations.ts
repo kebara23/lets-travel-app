@@ -24,7 +24,7 @@ export function useActiveUserLocations() {
         setLoading(true);
       }
       
-      // Fetch all active tracking data with user info
+      // Fetch all active tracking data with user info (only active users)
       const { data: trackingData, error: trackingError } = await supabase
         .from("device_tracking")
         .select(`
@@ -32,12 +32,14 @@ export function useActiveUserLocations() {
           lat,
           lng,
           updated_at,
+          is_active,
           users:user_id (
             id,
             full_name,
             email
           )
         `)
+        .eq("is_active", true) // Only get active tracking
         .order("updated_at", { ascending: false });
 
       if (trackingError) throw trackingError;
