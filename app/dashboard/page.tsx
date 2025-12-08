@@ -13,11 +13,15 @@ import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Map, FileText, Key, MessageSquare, LogOut, MapPin, Clock } from "lucide-react";
+import { Map, FileText, Key, MessageSquare, LogOut, MapPin, Clock, Edit, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { CountdownTimer } from "@/components/ui/CountdownTimer";
 import { ReviewDialog } from "@/components/features/reviews/ReviewDialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Simple countdown component for Next Activity
 function NextActivityCountdown({ targetDate }: { targetDate: Date }) {
@@ -76,6 +80,7 @@ type Trip = {
   end_date: string;
   status: "active" | "draft" | "completed";
   created_at: string;
+  user_id?: string;
   itinerary_items?: ItineraryItem[];
 };
 
@@ -93,6 +98,9 @@ export default function DashboardPage() {
   const [nextActivityTripId, setNextActivityTripId] = useState<string | null>(null); // Track which trip the next activity belongs to
   const [nextActivityStatus, setNextActivityStatus] = useState<"happening_now" | "upcoming" | null>(null);
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<ItineraryItem | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -630,6 +638,104 @@ export default function DashboardPage() {
     }
   }
 
+  // Calculate day number from date based on trip start date
+  function calculateDayNumber(dateString: string, tripStartDate: string): number {
+    if (!dateString || !tripStartDate) return 1;
+
+    const tripStart = new Date(tripStartDate);
+    const selectedDate = new Date(dateString);
+
+    // Reset time to compare only dates
+    tripStart.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    const diffTime = selectedDate.getTime() - tripStart.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays + 1;
+  }
+
+  // Open edit modal
+  function handleEditActivity() {
+    if (!nextActivity || !trip) return;
+    
+    // SECURITY: Verify activity belongs to user's trip
+    if (nextActivity.trip_id !== trip.id) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No puedes editar esta actividad.",
+      });
+      return;
+    }
+
+    setEditingActivity(nextActivity);
+    setIsEditModalOpen(true);
+  }
+
+  // Update activity date and time
+  async function handleUpdateActivity(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingActivity || !trip || !supabase || !user?.id) return;
+
+    setIsUpdating(true);
+
+    try {
+      const form = new FormData(e.currentTarget);
+      const newDate = form.get("date") as string;
+      const newTime = form.get("time") as string;
+
+      if (!newDate || !newTime) {
+        throw new Error("Fecha y hora son requeridas");
+      }
+
+      // SECURITY: Double-check activity belongs to user's trip
+      if (editingActivity.trip_id !== trip.id || trip.user_id !== user.id) {
+        throw new Error("No tienes permiso para editar esta actividad");
+      }
+
+      // Calculate new day number
+      const newDay = calculateDayNumber(newDate, trip.start_date);
+
+      // Update activity
+      const updates = {
+        day_date: newDate,
+        start_time: newTime,
+        day: newDay,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("itinerary_items")
+        .update(updates)
+        .eq("id", editingActivity.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Actividad actualizada",
+        description: "La fecha y hora de la actividad han sido actualizadas correctamente.",
+      });
+
+      // Refresh trips data
+      if (user.id) {
+        await fetchUserTrip(supabase, user.id);
+      }
+
+      setIsEditModalOpen(false);
+      setEditingActivity(null);
+    } catch (error: any) {
+      console.error("Error updating activity:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo actualizar la actividad.",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   async function handleSignOut() {
     if (!supabase) return;
 
@@ -824,6 +930,16 @@ export default function DashboardPage() {
                           })}
                         </p>
                       </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleEditActivity}
+                        className="text-primary hover:text-primary/80 hover:bg-primary/10"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar Fecha
+                      </Button>
                     </div>
                     
                     {/* Countdown */}
@@ -946,6 +1062,98 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Activity Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Reprogramar Actividad</DialogTitle>
+            <DialogDescription className="font-body">
+              Cambia la fecha y hora de esta actividad dentro de tu viaje.
+            </DialogDescription>
+          </DialogHeader>
+          {editingActivity && trip && (
+            <form onSubmit={handleUpdateActivity} className="space-y-4 mt-4">
+              {/* Activity Title (Read-only) */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-activity-title" className="font-body">
+                  Actividad
+                </Label>
+                <Input
+                  id="edit-activity-title"
+                  value={editingActivity.title}
+                  disabled
+                  className="font-body bg-muted"
+                />
+              </div>
+
+              {/* Date and Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-date" className="font-body">
+                    Fecha <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-date"
+                      name="date"
+                      type="date"
+                      defaultValue={editingActivity.day_date}
+                      min={trip.start_date}
+                      max={trip.end_date}
+                      className="font-body pl-10"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground font-body">
+                    Entre {new Date(trip.start_date).toLocaleDateString()} y {new Date(trip.end_date).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-time" className="font-body">
+                    Hora <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-time"
+                      name="time"
+                      type="time"
+                      defaultValue={editingActivity.start_time || (editingActivity as any).time || ""}
+                      className="font-body pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingActivity(null);
+                  }}
+                  className="font-body"
+                  disabled={isUpdating}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="font-body"
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? "Guardando..." : "Guardar Cambios"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
