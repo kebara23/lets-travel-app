@@ -344,47 +344,13 @@ export default function DashboardPage() {
             setTrip(tripsData[0] as Trip);
           }
         } else {
-          console.log("ℹ️ No upcoming activities found, showing first activity from trip");
-          // If no upcoming activities, show the first activity from the trip (even if past)
-          const firstTrip = tripsData[0];
-          if (firstTrip && firstTrip.itinerary_items && firstTrip.itinerary_items.length > 0) {
-            // Get the first activity sorted by date and time
-            const sortedItems = [...firstTrip.itinerary_items]
-              .map((item: any) => ({
-                ...item,
-                start_time: item.start_time || item.time || "",
-              }))
-              .filter((item: any) => item.day_date && (item.start_time || item.time))
-              .sort((a: any, b: any) => {
-                const dateA = new Date(`${a.day_date}T${a.start_time || a.time || "00:00"}`);
-                const dateB = new Date(`${b.day_date}T${b.start_time || b.time || "00:00"}`);
-                return dateA.getTime() - dateB.getTime();
-              });
-            
-            if (sortedItems.length > 0) {
-              const firstItem = sortedItems[0];
-              const [hours, minutes] = (firstItem.start_time || firstItem.time || "00:00").split(":").map(Number);
-              const [year, month, day] = firstItem.day_date.split("-").map(Number);
-              const activityDate = new Date(year, (month || 1) - 1, day, hours, minutes || 0, 0, 0);
-              
-              setNextActivity(firstItem as ItineraryItem);
-              setNextActivityDate(activityDate);
-              setNextActivityTripId(firstTrip.id);
-              setNextActivityStatus("upcoming"); // Mark as upcoming even if past, so it displays
-            } else {
-              setNextActivity(null);
-              setNextActivityDate(null);
-              setNextActivityTripId(null);
-              setNextActivityStatus(null);
-            }
-          } else {
-            setNextActivity(null);
-            setNextActivityDate(null);
-            setNextActivityTripId(null);
-            setNextActivityStatus(null);
-          }
-          // Show the first trip even if no upcoming activities
+          console.log("ℹ️ No upcoming activities found");
+          // Don't show past activities - only show upcoming ones
           setTrip(tripsData[0] as Trip);
+          setNextActivity(null);
+          setNextActivityDate(null);
+          setNextActivityTripId(null);
+          setNextActivityStatus(null);
         }
       } else {
         console.log("ℹ️ No itinerary items found in any trip");
@@ -436,14 +402,17 @@ export default function DashboardPage() {
         continue;
       }
 
-      if (!item.day_date || !item.start_time) {
+      // Normalize field names: map 'time' to 'start_time' if needed
+      const normalizedStartTime = item.start_time || (item as any).time || "";
+      
+      if (!item.day_date || !normalizedStartTime) {
         console.log("⏭️ Skipping item with missing date/time:", item.title);
         continue;
       }
 
       // Parse time and date (local timezone, avoid implicit UTC parsing)
       try {
-        const [hours, minutes] = item.start_time.split(":").map(Number);
+        const [hours, minutes] = normalizedStartTime.split(":").map(Number);
         const [year, month, day] = item.day_date.split("-").map(Number);
 
         // Create Date object using local timezone to avoid UTC shift
@@ -468,7 +437,7 @@ export default function DashboardPage() {
 
         console.log("📅 Activity:", item.title, {
           day_date: item.day_date,
-          start_time: item.start_time,
+          start_time: normalizedStartTime,
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           now: now.toISOString(),
@@ -752,68 +721,104 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {nextActivity && nextActivityDate ? (
+              {nextActivity && nextActivityDate && nextActivityDate > new Date() ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-heading text-lg font-semibold text-foreground">
-                        {nextActivityStatus === "happening_now" 
-                          ? "Happening Now" 
-                          : nextActivityDate > new Date()
-                          ? "Next Activity"
-                          : "Recent Activity"}
-                      </h3>
-                      <p className="font-body text-sm text-muted-foreground">
-                        {nextActivity.title}
-                      </p>
+                  {/* Next Activity Card */}
+                  <div className="bg-white/50 rounded-lg border border-primary/20 p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                          <span className="text-xs font-semibold text-primary uppercase tracking-wide font-body">
+                            Próxima Actividad
+                          </span>
+                        </div>
+                        <h3 className="font-heading text-xl font-semibold text-foreground">
+                          {nextActivity.title}
+                        </h3>
+                        {nextActivity.description && (
+                          <p className="font-body text-sm text-muted-foreground line-clamp-2">
+                            {nextActivity.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Clock className="h-5 w-5 text-primary" />
+                        <span className="text-xs font-medium text-muted-foreground font-body">
+                          {nextActivity.type}
+                        </span>
+                      </div>
                     </div>
-                    {nextActivityStatus === "happening_now" ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-                        <Clock className="h-5 w-5 text-green-600" />
-                      </div>
-                    ) : (
-                      <Clock className="h-5 w-5 text-primary" />
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {nextActivityStatus === "happening_now" ? (
-                      <div className="text-center py-2 bg-green-50 rounded-lg border border-green-200">
-                        <p className="text-sm font-medium text-green-800 font-body">
-                          This activity is currently in progress
-                        </p>
-                      </div>
-                    ) : nextActivityDate > new Date() ? (
-                      <>
-                        <NextActivityCountdown targetDate={nextActivityDate} />
-                        <Progress
-                          value={
-                            ((nextActivityDate.getTime() - new Date().getTime()) /
-                              (24 * 60 * 60 * 1000)) *
-                            100
-                          }
-                          className="h-2"
-                        />
-                      </>
-                    ) : (
-                      <div className="text-center py-2 bg-gray-50 rounded-lg border border-gray-200">
-                        <p className="text-sm font-medium text-gray-600 font-body">
+                    
+                    {/* Date and Time Info */}
+                    <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground font-body">
                           {nextActivityDate.toLocaleDateString("en-US", {
+                            weekday: "long",
                             month: "long",
                             day: "numeric",
                             year: "numeric",
-                          })} at {nextActivityDate.toLocaleTimeString("en-US", {
+                          })}
+                        </p>
+                        <p className="text-sm text-muted-foreground font-body">
+                          {nextActivityDate.toLocaleTimeString("en-US", {
                             hour: "numeric",
                             minute: "2-digit",
                           })}
                         </p>
                       </div>
-                    )}
+                    </div>
+                    
+                    {/* Countdown */}
+                    <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
+                      <NextActivityCountdown targetDate={nextActivityDate} />
+                      <Progress
+                        value={Math.min(
+                          ((nextActivityDate.getTime() - new Date().getTime()) /
+                            (24 * 60 * 60 * 1000)) *
+                            100,
+                          100
+                        )}
+                        className="h-2 mt-2"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : nextActivity && nextActivityStatus === "happening_now" ? (
+                <div className="space-y-4">
+                  {/* Current Activity Card */}
+                  <div className="bg-green-50 rounded-lg border-2 border-green-200 p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-xs font-semibold text-green-800 uppercase tracking-wide font-body">
+                            Actividad en Curso
+                          </span>
+                        </div>
+                        <h3 className="font-heading text-xl font-semibold text-green-900">
+                          {nextActivity.title}
+                        </h3>
+                        {nextActivity.description && (
+                          <p className="font-body text-sm text-green-700 line-clamp-2">
+                            {nextActivity.description}
+                          </p>
+                        )}
+                      </div>
+                      <Clock className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="text-center py-2 bg-green-100 rounded-lg">
+                      <p className="text-sm font-medium text-green-800 font-body">
+                        Esta actividad está en progreso ahora
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground font-body">
-                  No activities scheduled for this trip
+                  <p className="mb-2">No hay actividades próximas programadas</p>
+                  <p className="text-xs">Tu itinerario completo estará disponible pronto</p>
                 </div>
               )}
               <Link href="/itinerary">
