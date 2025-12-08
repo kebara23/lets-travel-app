@@ -199,69 +199,115 @@ export default function TrackingPage() {
     setIsSharing(newState);
 
     try {
-      // Persist to DB
-      const updateData: any = {
-        user_id: userId,
-        is_active: newState,
-        updated_at: new Date().toISOString(),
-      };
-
       // If turning on, try to get current position immediately to save with it
       if (newState && "geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
-            updateData.lat = pos.coords.latitude;
-            updateData.lng = pos.coords.longitude;
+            const updateData = {
+              user_id: userId,
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              is_active: true,
+              updated_at: new Date().toISOString(),
+            };
+            
             setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
             
             // Perform upsert with position - await to ensure it completes
             const { error } = await supabase.from("device_tracking").upsert(updateData, {
               onConflict: 'user_id'
             });
+            
             if (error) {
               console.error("Error saving tracking data:", error);
-              throw error;
+              setIsSharing(false); // Revert on error
+              
+              // Check if error is related to missing column
+              const errorMessage = error.message || "Failed to enable location sharing.";
+              const isColumnError = errorMessage.includes("column") && errorMessage.includes("does not exist");
+              
+              toast({
+                variant: "destructive",
+                title: "Error",
+                description: isColumnError 
+                  ? "Database configuration error. Please contact support."
+                  : errorMessage,
+              });
+              setIsToggling(false);
+              return;
             }
+
+            toast({
+              title: "Location Sharing Enabled",
+              description: "Your location is now being shared with concierge.",
+            });
+            setIsToggling(false);
           },
           async (error) => {
             console.error("Error getting position:", error);
-            // On error getting immediate position, just save status
-            const { error: dbError } = await supabase.from("device_tracking").upsert(updateData, {
-              onConflict: 'user_id'
+            setIsSharing(false); // Revert on error
+            toast({
+              variant: "destructive",
+              title: "Location Error",
+              description: "Unable to get your location. Please check permissions.",
             });
-            if (dbError) {
-              console.error("Error saving tracking status:", dbError);
-              throw dbError;
-            }
+            setIsToggling(false);
           },
           { timeout: 5000 }
         );
       } else {
-        // Turning off - clear position and save status
-        setPosition(null);
-        // Just save status change
-        const { error } = await supabase.from("device_tracking").upsert(updateData, {
-          onConflict: 'user_id'
-        });
-        if (error) throw error;
+        // Turning off - update is_active to false, keep existing lat/lng
+        // First check if record exists
+        const { data: existingRecord } = await supabase
+          .from("device_tracking")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
+        
+        if (existingRecord) {
+          // Record exists, update it
+          const { error } = await supabase
+            .from("device_tracking")
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId);
+          
+          if (error) {
+            console.error("Error disabling tracking:", error);
+            setIsSharing(true); // Revert on error
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: error.message || "Failed to disable location sharing. Please try again.",
+            });
+          } else {
+            setPosition(null);
+            toast({
+              title: "Location Sharing Disabled",
+              description: "Your location is now private.",
+            });
+          }
+        } else {
+          // No record exists, nothing to update
+          setPosition(null);
+          toast({
+            title: "Location Sharing Disabled",
+            description: "Your location is now private.",
+          });
+        }
+        setIsToggling(false);
       }
 
-      toast({
-        title: newState ? "Location Sharing Enabled" : "Location Sharing Disabled",
-        description: newState 
-          ? "Your location is now being shared with concierge." 
-          : "Your location is now private.",
-      });
-
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling sharing:", error);
       setIsSharing(!newState); // Revert on error
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update location settings.",
+        description: error?.message || "Failed to update location settings.",
       });
-    } finally {
       setIsToggling(false);
     }
   };
