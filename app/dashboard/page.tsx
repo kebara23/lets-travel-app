@@ -269,7 +269,21 @@ export default function DashboardPage() {
       // Fetch ALL active trips (not just one)
       const { data: tripsData, error: tripsError } = await supabaseClient
         .from("trips")
-        .select("*, itinerary_items(*)") // ✅ explicit deep fetch
+        .select(`
+          *,
+          itinerary_items (
+            id,
+            trip_id,
+            day,
+            day_date,
+            start_time,
+            time,
+            title,
+            description,
+            type,
+            is_completed
+          )
+        `) // ✅ explicit deep fetch with all needed fields
         .eq("user_id", userId)
         .in("status", ["active", "upcoming"])
         .order("start_date", { ascending: true }); // Order by start date, not created_at
@@ -302,9 +316,15 @@ export default function DashboardPage() {
       tripsData.forEach((trip: any) => {
         console.log("DASHBOARD DEBUG - Trip:", trip?.id, "itinerary_items:", trip?.itinerary_items);
         if (trip.itinerary_items && Array.isArray(trip.itinerary_items)) {
-          trip.itinerary_items.forEach((item: ItineraryItem) => {
+          trip.itinerary_items.forEach((item: any) => {
+            // Normalize field names: map 'time' to 'start_time' if needed
+            const normalizedItem: ItineraryItem = {
+              ...item,
+              start_time: item.start_time || item.time || "", // Support both field names
+            };
+            
             allItems.push({
-              item,
+              item: normalizedItem,
               tripId: trip.id,
               tripTitle: trip.title,
             });
@@ -338,13 +358,47 @@ export default function DashboardPage() {
             setTrip(tripsData[0] as Trip);
           }
         } else {
-          console.log("ℹ️ No upcoming activities found");
+          console.log("ℹ️ No upcoming activities found, showing first activity from trip");
+          // If no upcoming activities, show the first activity from the trip (even if past)
+          const firstTrip = tripsData[0];
+          if (firstTrip && firstTrip.itinerary_items && firstTrip.itinerary_items.length > 0) {
+            // Get the first activity sorted by date and time
+            const sortedItems = [...firstTrip.itinerary_items]
+              .map((item: any) => ({
+                ...item,
+                start_time: item.start_time || item.time || "",
+              }))
+              .filter((item: any) => item.day_date && (item.start_time || item.time))
+              .sort((a: any, b: any) => {
+                const dateA = new Date(`${a.day_date}T${a.start_time || a.time || "00:00"}`);
+                const dateB = new Date(`${b.day_date}T${b.start_time || b.time || "00:00"}`);
+                return dateA.getTime() - dateB.getTime();
+              });
+            
+            if (sortedItems.length > 0) {
+              const firstItem = sortedItems[0];
+              const [hours, minutes] = (firstItem.start_time || firstItem.time || "00:00").split(":").map(Number);
+              const [year, month, day] = firstItem.day_date.split("-").map(Number);
+              const activityDate = new Date(year, (month || 1) - 1, day, hours, minutes || 0, 0, 0);
+              
+              setNextActivity(firstItem as ItineraryItem);
+              setNextActivityDate(activityDate);
+              setNextActivityTripId(firstTrip.id);
+              setNextActivityStatus("upcoming"); // Mark as upcoming even if past, so it displays
+            } else {
+              setNextActivity(null);
+              setNextActivityDate(null);
+              setNextActivityTripId(null);
+              setNextActivityStatus(null);
+            }
+          } else {
+            setNextActivity(null);
+            setNextActivityDate(null);
+            setNextActivityTripId(null);
+            setNextActivityStatus(null);
+          }
           // Show the first trip even if no upcoming activities
           setTrip(tripsData[0] as Trip);
-          setNextActivity(null);
-          setNextActivityDate(null);
-          setNextActivityTripId(null);
-          setNextActivityStatus(null);
         }
       } else {
         console.log("ℹ️ No itinerary items found in any trip");
@@ -717,7 +771,11 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-heading text-lg font-semibold text-foreground">
-                        {nextActivityStatus === "happening_now" ? "Happening Now" : "Next Activity"}
+                        {nextActivityStatus === "happening_now" 
+                          ? "Happening Now" 
+                          : nextActivityDate > new Date()
+                          ? "Next Activity"
+                          : "Recent Activity"}
                       </h3>
                       <p className="font-body text-sm text-muted-foreground">
                         {nextActivity.title}
@@ -739,7 +797,7 @@ export default function DashboardPage() {
                           This activity is currently in progress
                         </p>
                       </div>
-                    ) : (
+                    ) : nextActivityDate > new Date() ? (
                       <>
                         <NextActivityCountdown targetDate={nextActivityDate} />
                         <Progress
@@ -751,12 +809,25 @@ export default function DashboardPage() {
                           className="h-2"
                         />
                       </>
+                    ) : (
+                      <div className="text-center py-2 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-sm font-medium text-gray-600 font-body">
+                          {nextActivityDate.toLocaleDateString("en-US", {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          })} at {nextActivityDate.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground font-body">
-                  No upcoming activities scheduled
+                  No activities scheduled for this trip
                 </div>
               )}
               <Link href="/itinerary">
