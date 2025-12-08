@@ -211,22 +211,30 @@ export default function DashboardPage() {
         async (payload) => {
           console.log("🔔 Itinerary item changed (Realtime):", payload.eventType, payload);
           
-          // Check if this itinerary item belongs to a trip of this user
+          // SECURITY: Check if this itinerary item belongs to a trip of this user
           const newRecord = payload.new as { trip_id?: string } | null;
           const oldRecord = payload.old as { trip_id?: string } | null;
           const tripId = newRecord?.trip_id || oldRecord?.trip_id;
           
           if (tripId && user.id) {
-            const { data: tripData } = await supabase
+            const { data: tripData, error: tripError } = await supabase
               .from("trips")
-              .select("user_id")
+              .select("user_id, id")
               .eq("id", tripId)
               .single();
             
+            if (tripError) {
+              console.error("🚨 Error checking trip ownership:", tripError);
+              return; // Don't refresh if we can't verify ownership
+            }
+            
+            // SECURITY: Double-check the trip belongs to this user
             if (tripData && tripData.user_id === user.id) {
-              console.log("🔔 Itinerary item belongs to user's trip, refreshing...");
+              console.log(`🔔 Itinerary item belongs to user's trip (${tripId}), refreshing...`);
               // Refresh trips data when itinerary item changes
               fetchUserTrip(supabase, user.id);
+            } else {
+              console.log(`🚨 SECURITY: Itinerary item change ignored - trip ${tripId} belongs to user ${tripData?.user_id}, not ${user.id}`);
             }
           }
         }
@@ -293,19 +301,46 @@ export default function DashboardPage() {
         return;
       }
 
-      console.log(`✅ Found ${tripsData.length} trip(s) for user`);
+      console.log(`✅ Found ${tripsData.length} trip(s) for user: ${userId}`);
       console.log("DASHBOARD DEBUG - Trips payload:", tripsData);
 
-      // Collect ALL itinerary items from ALL trips
+      // SECURITY: Verify all trips belong to the correct user
+      const validTrips = tripsData.filter((trip: any) => {
+        if (trip.user_id !== userId) {
+          console.error(`🚨 SECURITY WARNING: Trip ${trip.id} belongs to user ${trip.user_id}, not ${userId}`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validTrips.length !== tripsData.length) {
+        console.error(`🚨 SECURITY ALERT: Filtered out ${tripsData.length - validTrips.length} trips that don't belong to user ${userId}`);
+      }
+
+      // Collect ALL itinerary items from ALL trips (only from valid trips)
       const allItems: Array<{ item: ItineraryItem; tripId: string; tripTitle: string }> = [];
       
-      tripsData.forEach((trip: any) => {
-        console.log("DASHBOARD DEBUG - Trip:", trip?.id, "itinerary_items:", trip?.itinerary_items);
+      validTrips.forEach((trip: any) => {
+        // Double-check trip belongs to user
+        if (trip.user_id !== userId) {
+          console.error(`🚨 SECURITY: Skipping trip ${trip.id} - user_id mismatch`);
+          return;
+        }
+
+        console.log("DASHBOARD DEBUG - Trip:", trip?.id, "user_id:", trip?.user_id, "itinerary_items:", trip?.itinerary_items?.length || 0);
+        
         if (trip.itinerary_items && Array.isArray(trip.itinerary_items)) {
           trip.itinerary_items.forEach((item: any) => {
+            // SECURITY: Verify item belongs to this trip
+            if (item.trip_id && item.trip_id !== trip.id) {
+              console.error(`🚨 SECURITY WARNING: Itinerary item ${item.id} has trip_id ${item.trip_id} but belongs to trip ${trip.id}`);
+              return; // Skip this item
+            }
+
             // Normalize field names: map 'time' to 'start_time' if needed
             const normalizedItem: ItineraryItem = {
               ...item,
+              trip_id: trip.id, // Ensure trip_id is set correctly
               start_time: item.start_time || item.time || "", // Support both field names
             };
             
@@ -336,17 +371,27 @@ export default function DashboardPage() {
           setNextActivityStatus(next.status);
           
           // Set the trip that contains the next activity (or the first trip if no next activity)
-          const tripWithNextActivity = tripsData.find((t: any) => t.id === next.tripId);
+          // SECURITY: Only use trips that belong to this user
+          const tripWithNextActivity = validTrips.find((t: any) => t.id === next.tripId && t.user_id === userId);
           if (tripWithNextActivity) {
             setTrip(tripWithNextActivity as Trip);
           } else {
-            // Fallback: show the first trip
-            setTrip(tripsData[0] as Trip);
+            // Fallback: show the first valid trip
+            if (validTrips.length > 0) {
+              setTrip(validTrips[0] as Trip);
+            } else {
+              setTrip(null);
+            }
           }
         } else {
           console.log("ℹ️ No upcoming activities found");
           // Don't show past activities - only show upcoming ones
-          setTrip(tripsData[0] as Trip);
+          // SECURITY: Only use valid trips
+          if (validTrips.length > 0) {
+            setTrip(validTrips[0] as Trip);
+          } else {
+            setTrip(null);
+          }
           setNextActivity(null);
           setNextActivityDate(null);
           setNextActivityTripId(null);
@@ -354,8 +399,13 @@ export default function DashboardPage() {
         }
       } else {
         console.log("ℹ️ No itinerary items found in any trip");
-        // Show the first trip even if no items
-        setTrip(tripsData[0] as Trip);
+        // Show the first valid trip even if no items
+        // SECURITY: Only use valid trips
+        if (validTrips.length > 0) {
+          setTrip(validTrips[0] as Trip);
+        } else {
+          setTrip(null);
+        }
         setNextActivity(null);
         setNextActivityDate(null);
         setNextActivityTripId(null);
@@ -397,6 +447,12 @@ export default function DashboardPage() {
     console.log("🕐 Current time:", now.toISOString(), "Local:", now.toLocaleString());
 
     for (const { item, tripId, tripTitle } of allItems) {
+      // SECURITY: Verify item belongs to the trip
+      if (item.trip_id && item.trip_id !== tripId) {
+        console.error(`🚨 SECURITY WARNING: Item ${item.id} has trip_id ${item.trip_id} but is associated with trip ${tripId}`);
+        continue; // Skip this item
+      }
+
       if (item.is_completed) {
         console.log("⏭️ Skipping completed item:", item.title);
         continue;
