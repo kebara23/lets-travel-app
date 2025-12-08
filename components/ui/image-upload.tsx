@@ -174,3 +174,4 @@ export function ImageUpload({ value, onChange, onFileSelect, className }: ImageU
     </div>
   );
 }
+
