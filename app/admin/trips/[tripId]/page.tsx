@@ -420,11 +420,22 @@ export default function TripEditorPage() {
 
   async function handleUpdateItem(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!editingItem) return;
+    if (!editingItem || !trip) return;
 
     const form = new FormData(e.currentTarget);
+    const newDate = form.get("date") as string;
+    const newTime = form.get("time") as string;
+    
+    // Calculate new day number if date changed
+    let newDay = editingItem.day;
+    if (newDate && newDate !== editingItem.day_date) {
+      newDay = calculateDayNumber(newDate);
+    }
+
     const updates = {
-      start_time: form.get("time") as string,
+      start_time: newTime,
+      day_date: newDate || editingItem.day_date,
+      day: newDay,
       title: (form.get("title") as string).trim(),
       type: form.get("type") as "flight" | "hotel" | "activity" | "food" | "transport",
       description: (form.get("description") as string).trim() || null,
@@ -1157,8 +1168,23 @@ export default function TripEditorPage() {
                 />
               </div>
 
-              {/* Time & Type Row */}
+              {/* Date & Time Row */}
               <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-date" className="font-body">
+                    Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="edit-date"
+                    name="date"
+                    type="date"
+                    defaultValue={editingItem.day_date}
+                    min={trip.start_date}
+                    max={trip.end_date}
+                    className="font-body"
+                    required
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-time" className="font-body">
                     Time <span className="text-red-500">*</span>
@@ -1172,24 +1198,26 @@ export default function TripEditorPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-type" className="font-body">
-                    Type <span className="text-red-500">*</span>
-                  </Label>
-                  <select
-                    id="edit-type"
-                    name="type"
-                    defaultValue={editingItem.type}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-body"
-                    required
-                  >
-                    <option value="flight">Flight</option>
-                    <option value="hotel">Hotel</option>
-                    <option value="activity">Activity</option>
-                    <option value="food">Food</option>
-                    <option value="transport">Transport</option>
-                  </select>
-                </div>
+              </div>
+
+              {/* Type */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-type" className="font-body">
+                  Type <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="edit-type"
+                  name="type"
+                  defaultValue={editingItem.type}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-body"
+                  required
+                >
+                  <option value="flight">Flight</option>
+                  <option value="hotel">Hotel</option>
+                  <option value="activity">Activity</option>
+                  <option value="food">Food</option>
+                  <option value="transport">Transport</option>
+                </select>
               </div>
 
               {/* Description */}
