@@ -269,21 +269,7 @@ export default function DashboardPage() {
       // Fetch ALL active trips (not just one)
       const { data: tripsData, error: tripsError } = await supabaseClient
         .from("trips")
-        .select(`
-          *,
-          itinerary_items (
-            id,
-            trip_id,
-            day,
-            day_date,
-            start_time,
-            time,
-            title,
-            description,
-            type,
-            is_completed
-          )
-        `) // ✅ explicit deep fetch with all needed fields
+        .select("*, itinerary_items(*)") // ✅ explicit deep fetch - use * to get all fields
         .eq("user_id", userId)
         .in("status", ["active", "upcoming"])
         .order("start_date", { ascending: true }); // Order by start date, not created_at
