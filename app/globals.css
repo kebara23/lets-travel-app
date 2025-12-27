@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 93%; /* Cream #F5EFE6 */
+    --foreground: 154 44% 19%; /* Forest Green #1B4734 */
+    
+    --primary: 154 44% 19%;
+    --primary-foreground: 40 33% 93%;
+    
+    --accent: 41 54% 55%; /* Gold #C9A24E */
+    --accent-foreground: 154 44% 19%;
+
+    --radius: 0.75rem; /* rounded-xl */
+  }
+}
+
+body {
+  background-color: #F5EFE6;
+  color: #1B4734;
+}
+
+/* Luxury Card Shadow */
+.luxury-card {
+  @apply bg-white/50 backdrop-blur-sm border border-white/20 rounded-2xl shadow-sm transition-all hover:shadow-md;
+}
+
+
