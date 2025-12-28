@@ -5,20 +5,12 @@ import { Check, Clock, AlertTriangle, Search, Filter, Settings } from "lucide-re
 import { StaffNavigation } from "@/components/shared/staff-navigation";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-
-const MOCK_ROOMS = [
-  { id: "101", name: "Cabin 01", status: "dirty", guest: "Gomez Fam." },
-  { id: "102", name: "Cabin 02", status: "cleaning", guest: "Checking out" },
-  { id: "103", name: "Cabin 03", status: "clean", guest: "Empty" },
-  { id: "104", name: "Cabin 04", status: "dirty", guest: "Smith" },
-  { id: "105", name: "Suite A", status: "maintenance", guest: "Out of order" },
-  { id: "106", name: "Suite B", status: "clean", guest: "Arriving 2PM" },
-];
+import { useUserStore } from "@/store/use-user-store";
 
 type RoomStatus = "dirty" | "cleaning" | "clean" | "maintenance";
 
 export default function HarmonyRoomsPage() {
-  const [rooms, setRooms] = useState(MOCK_ROOMS);
+  const { mockSpaces, updateMockSpace } = useUserStore();
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
   const updateRoomStatus = async (roomId: string, currentStatus: RoomStatus) => {
@@ -33,21 +25,15 @@ export default function HarmonyRoomsPage() {
     setIsUpdating(roomId);
 
     try {
-      // In a real app, 'spaces' table would be updated
-      const { error } = await supabase
+      // This will emit a mock event in lib/supabase.ts
+      await supabase
         .from('spaces')
         .update({ status: nextStatus })
         .eq('id', roomId);
 
-      if (error) {
-        // Fallback for demo if table doesn't exist yet
-        console.warn("Table 'spaces' not found or error, doing local update for demo.");
-      }
+      // Update local simulation store
+      updateMockSpace(roomId, nextStatus);
       
-      // Update local state (Optimistic)
-      setRooms(prev => prev.map(r => 
-        r.id === roomId ? { ...r, status: nextStatus } : r
-      ));
     } catch (err) {
       console.error("Error updating room:", err);
     } finally {
@@ -100,9 +86,9 @@ export default function HarmonyRoomsPage() {
       {/* Stats Quick-View */}
       <div className="flex p-4 gap-2 overflow-x-auto no-scrollbar">
          {[
-           { label: "Dirty", count: 2, color: "bg-red-500" },
-           { label: "Cleaning", count: 1, color: "bg-amber-400" },
-           { label: "Clean", count: 2, color: "bg-emerald-500" },
+           { label: "Dirty", count: mockSpaces.filter(s => s.status === 'dirty').length, color: "bg-red-500" },
+           { label: "Cleaning", count: mockSpaces.filter(s => s.status === 'cleaning').length, color: "bg-amber-400" },
+           { label: "Clean", count: mockSpaces.filter(s => s.status === 'clean').length, color: "bg-emerald-500" },
          ].map(stat => (
            <div key={stat.label} className="bg-white rounded-2xl p-4 flex-1 shadow-sm border border-slate-100 min-w-[100px]">
               <div className={cn("w-2 h-2 rounded-full mb-2", stat.color)} />
@@ -114,14 +100,14 @@ export default function HarmonyRoomsPage() {
 
       {/* Traffic Light Grid */}
       <div className="px-4 grid grid-cols-2 gap-4">
-        {rooms.map((room) => (
+        {mockSpaces.map((room) => (
           <button
             key={room.id}
             onClick={() => updateRoomStatus(room.id, room.status as RoomStatus)}
             disabled={isUpdating === room.id}
             className={cn(
-                "bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center space-y-3 active:scale-95 transition-all overflow-hidden relative",
-                isUpdating === room.id && "opacity-50 scale-95"
+              "bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center space-y-3 active:scale-95 transition-all overflow-hidden relative",
+              isUpdating === room.id && "opacity-50 scale-95"
             )}
           >
             {/* Status Ribbon */}
@@ -140,7 +126,7 @@ export default function HarmonyRoomsPage() {
             <div>
               <h3 className="text-xl font-bold text-primary">{room.name}</h3>
               <p className="text-xs font-medium text-primary/40 uppercase tracking-wide truncate max-w-[120px]">
-                {room.guest}
+                {room.type === 'room' ? 'Cabin Guest' : 'Common Area'}
               </p>
             </div>
 
@@ -158,6 +144,3 @@ export default function HarmonyRoomsPage() {
     </div>
   );
 }
-
-
-

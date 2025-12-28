@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { CheckCircle2, Circle, Trophy, Flame, Users } from "lucide-react";
 import { TribeNavigation } from "@/components/shared/tribe-navigation";
 import { cn } from "@/lib/utils";
+import { DopamineEffect } from "@/components/shared/dopamine-effect";
 
 const MOCK_MISSIONS = [
   { id: "1", title: "Morning Community Garden", time: "08:00 AM", status: "done" },
@@ -13,12 +14,16 @@ const MOCK_MISSIONS = [
 
 export default function TribeMissionsPage() {
   const [missions, setMissions] = useState(MOCK_MISSIONS);
+  const [showDopamine, setShowDopamine] = useState(false);
 
   const toggleMission = (id: string) => {
+    const mission = missions.find(m => m.id === id);
+    if (mission && mission.status !== "done") {
+      setShowDopamine(true);
+    }
     setMissions(prev => prev.map(m => 
       m.id === id ? { ...m, status: m.status === "done" ? "pending" : "done" } : m
     ));
-    // Here we would trigger the "Dopamine Effect" (Confetti or Sound)
   };
 
   const completedCount = missions.filter(m => m.status === "done").length;
@@ -26,6 +31,7 @@ export default function TribeMissionsPage() {
 
   return (
     <div className="min-h-screen pb-32 pt-8 px-6">
+      <DopamineEffect active={showDopamine} onComplete={() => setShowDopamine(false)} />
       {/* Header Section */}
       <header className="mb-8 space-y-2">
         <div className="flex justify-between items-center">

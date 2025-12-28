@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { RegenerationNavigation } from "@/components/shared/regeneration-navigation";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 const MOCK_TICKETS = [
   { 
@@ -44,7 +45,34 @@ const MOCK_TICKETS = [
 ];
 
 export default function RegenerationTicketsPage() {
-  const [tickets] = useState(MOCK_TICKETS);
+  const [tickets, setTickets] = useState(MOCK_TICKETS);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
+
+  const updateTicketStatus = async (ticketId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "open" ? "in_progress" : "resolved";
+    setIsUpdating(ticketId);
+
+    try {
+      // In a real app, update the 'tickets' table
+      const { error } = await supabase
+        .from('tickets')
+        .update({ status: nextStatus })
+        .eq('id', ticketId);
+
+      if (error) {
+        console.warn("Table 'tickets' not found or error, doing local update.");
+      }
+
+      // Optimistic update
+      setTickets(prev => prev.map(t => 
+        t.id === ticketId ? { ...t, status: nextStatus } : t
+      ));
+    } catch (err) {
+      console.error("Error updating ticket:", err);
+    } finally {
+      setIsUpdating(null);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -104,7 +132,12 @@ export default function RegenerationTicketsPage() {
         {tickets.map((ticket) => (
           <div 
             key={ticket.id}
-            className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 active:scale-[0.98] transition-all cursor-pointer group"
+            onClick={() => ticket.status !== 'resolved' && updateTicketStatus(ticket.id, ticket.status)}
+            className={cn(
+              "bg-white rounded-3xl p-6 shadow-sm border border-slate-100 active:scale-[0.98] transition-all cursor-pointer group relative",
+              ticket.status === 'resolved' && "opacity-60",
+              isUpdating === ticket.id && "animate-pulse"
+            )}
           >
             <div className="flex justify-between items-start mb-4">
                <div className={cn(
@@ -154,4 +187,5 @@ export default function RegenerationTicketsPage() {
     </div>
   );
 }
+
 

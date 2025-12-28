@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { GuestNavigation } from "@/components/shared/guest-navigation";
 import { cn } from "@/lib/utils";
+import { DopamineEffect } from "@/components/shared/dopamine-effect";
 
 const MOCK_ITINERARY = [
   { id: "1", title: "Sunrise Meditation", type: "Wellness", time: "07:00 AM", completed: true, icon: Wind },
@@ -23,8 +24,13 @@ const MOCK_ITINERARY = [
 
 export default function GuestDashboardPage() {
   const [items, setItems] = useState(MOCK_ITINERARY);
+  const [showDopamine, setShowDopamine] = useState(false);
 
   const toggleItem = (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (item && !item.completed) {
+      setShowDopamine(true);
+    }
     setItems(prev => prev.map(item => 
       item.id === id ? { ...item, completed: !item.completed } : item
     ));
@@ -34,6 +40,7 @@ export default function GuestDashboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-32 pt-12 px-6">
+      <DopamineEffect active={showDopamine} onComplete={() => setShowDopamine(false)} />
       {/* Dynamic Header */}
       <header className="mb-10 space-y-1">
         <div className="flex justify-between items-start">
@@ -142,5 +149,6 @@ export default function GuestDashboardPage() {
     </div>
   );
 }
+
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Users, 
   Home, 
@@ -15,7 +15,7 @@ import {
 import { AdminNavigation } from "@/components/shared/admin-navigation";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { useUserStore } from "@/store/use-user-store";
 
 const STATS = [
   { label: "Total Occupancy", value: "84%", icon: Home, trend: "+2.4%", color: "text-blue-600" },
@@ -25,6 +25,7 @@ const STATS = [
 ];
 
 export default function GuardianDashboardPage() {
+  const { mockSpaces, updateMockSpace, mockSOS, addMockSOS } = useUserStore();
   const [alerts, setAlerts] = useState([
     { id: "1", type: "SOS", user: "Marco Rossi", location: "Sector 4 - Cabin 12", time: "2m ago", status: "active" },
     { id: "2", type: "MAINTENANCE", user: "Harmony Team", location: "Main Pool", time: "15m ago", status: "pending" },
@@ -32,31 +33,58 @@ export default function GuardianDashboardPage() {
   ]);
 
   useEffect(() => {
-    // 1. Listen for new SOS Alerts in Realtime
+    // Listen for new SOS Alerts in Realtime (Mock or Real)
     const sosSubscription = supabase
       .channel('sos-updates')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'sos_alerts' 
-      }, (payload) => {
-        console.log('New SOS Alert!', payload);
+      }, (payload: any) => {
+        console.log('Realtime SOS Alert!', payload);
         const newAlert = {
           id: payload.new.id,
           type: "SOS",
-          user: "New SOS Alert", // We would fetch user details here
+          user: "Emergency Alert", 
           location: "Unknown Location", 
           time: "Just now",
           status: "active"
         };
         setAlerts(prev => [newAlert, ...prev]);
+        addMockSOS(payload.new);
+      })
+      .subscribe();
+
+    // Listen for Room Status Changes in Realtime (Mock or Real)
+    const roomsSubscription = supabase
+      .channel('room-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'spaces'
+      }, (payload: any) => {
+        console.log('Realtime Room Status Updated!', payload);
+        updateMockSpace(payload.new.id, payload.new.status);
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(sosSubscription);
+      if (supabase.removeChannel) {
+        supabase.removeChannel(sosSubscription);
+        supabase.removeChannel(roomsSubscription);
+      }
     };
   }, []);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "dirty": return "bg-red-500";
+      case "cleaning": return "bg-amber-400";
+      case "clean": return "bg-emerald-500";
+      case "maintenance": return "bg-slate-700";
+      default: return "bg-slate-300";
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 lg:pl-64">
@@ -112,10 +140,10 @@ export default function GuardianDashboardPage() {
                 </h3>
                 <div className="flex gap-2">
                    <div className="flex items-center gap-1.5 text-xs font-bold text-primary/40">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" /> 141 Stable
+                      <div className="w-2 h-2 rounded-full bg-emerald-500" /> {mockSpaces.filter(s => s.status === 'clean').length} Stable
                    </div>
                    <div className="flex items-center gap-1.5 text-xs font-bold text-primary/40 ml-4">
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> 1 Alert
+                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {mockSOS.length} Alert
                    </div>
                 </div>
              </div>
@@ -123,20 +151,47 @@ export default function GuardianDashboardPage() {
                 {/* Simulated Map Background */}
                 <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1526772662000-3f88f10405ff?q=80&w=2000')] bg-cover bg-center opacity-40 grayscale" />
                 
-                {/* SOS Pulse Pin */}
-                <div className="absolute top-[40%] left-[60%] -translate-x-1/2 -translate-y-1/2">
-                   <div className="relative">
-                      <div className="absolute inset-0 w-12 h-12 bg-red-500 rounded-full animate-ping opacity-30" />
-                      <div className="relative w-8 h-8 bg-red-500 rounded-full flex items-center justify-center border-4 border-white shadow-xl">
-                         <ShieldAlert className="w-4 h-4 text-white" />
-                      </div>
-                   </div>
-                </div>
+                {/* SOS Pulse Pins (Dynamic) */}
+                {mockSOS.map((sos, i) => (
+                  <div 
+                    key={sos.id}
+                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ top: `${40 + (i * 10)}%`, left: `${60 - (i * 10)}%` }}
+                  >
+                     <div className="relative">
+                        <div className="absolute inset-0 w-12 h-12 bg-red-500 rounded-full animate-ping opacity-30" />
+                        <div className="relative w-8 h-8 bg-red-500 rounded-full flex items-center justify-center border-4 border-white shadow-xl">
+                           <ShieldAlert className="w-4 h-4 text-white" />
+                        </div>
+                     </div>
+                  </div>
+                ))}
                 
-                {/* Other Static Pins */}
-                <div className="absolute top-[20%] left-[30%] w-3 h-3 bg-emerald-500 rounded-full border-2 border-white shadow-md" />
-                <div className="absolute top-[70%] left-[20%] w-3 h-3 bg-emerald-500 rounded-full border-2 border-white shadow-md" />
-                <div className="absolute top-[80%] left-[80%] w-3 h-3 bg-emerald-500 rounded-full border-2 border-white shadow-md" />
+                {/* Dynamic Room Status Pins */}
+                {mockSpaces.map((room, i) => {
+                  const positions = [
+                    { top: '20%', left: '30%' },
+                    { top: '70%', left: '20%' },
+                    { top: '80%', left: '80%' },
+                    { top: '30%', left: '75%' },
+                  ];
+                  const pos = positions[i % positions.length];
+                  
+                  return (
+                    <div 
+                      key={room.id}
+                      style={{ top: pos.top, left: pos.left }}
+                      className={cn(
+                        "absolute w-4 h-4 rounded-full border-2 border-white shadow-md transition-all duration-700",
+                        getStatusColor(room.status)
+                      )}
+                    >
+                      {room.status === "cleaning" && (
+                        <div className="absolute inset-0 bg-inherit rounded-full animate-ping opacity-40" />
+                      )}
+                    </div>
+                  );
+                })}
              </div>
           </div>
 
@@ -182,16 +237,16 @@ export default function GuardianDashboardPage() {
               </div>
               <div>
                  <h4 className="text-xl font-bold text-primary">System Integrity: 100%</h4>
-                 <p className="text-primary/40">All 6 operational modules are communicating with the Hive.</p>
+                 <p className="text-primary/40">AWAKE OS is running in Offline Simulation Mode.</p>
               </div>
            </div>
            <div className="flex gap-4">
               <div className="flex flex-col items-end">
-                 <span className="text-[10px] uppercase font-black text-primary/30 tracking-widest">Network Latency</span>
-                 <span className="font-bold">24ms</span>
+                 <span className="text-[10px] uppercase font-black text-primary/30 tracking-widest">Local Latency</span>
+                 <span className="font-bold">0ms</span>
               </div>
               <div className="flex flex-col items-end ml-8">
-                 <span className="text-[10px] uppercase font-black text-primary/30 tracking-widest">Global Sync</span>
+                 <span className="text-[10px] uppercase font-black text-primary/30 tracking-widest">Offline Sync</span>
                  <span className="font-bold">Active</span>
               </div>
            </div>
@@ -200,5 +255,3 @@ export default function GuardianDashboardPage() {
     </div>
   );
 }
-
-

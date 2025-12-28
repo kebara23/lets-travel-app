@@ -38,15 +38,64 @@ const MOCK_POSTS = [
 ];
 
 const UPCOMING_EVENTS = [
-  { id: "e1", title: "Sunset BBQ", date: "Tomorrow, 6PM", attendees: 14 },
-  { id: "e2", title: "Tech Meetup", date: "Friday, 10AM", attendees: 8 },
+  { id: "e1", title: "Sunset BBQ", date: "Tomorrow, 6PM", attendees: 14, type: "Community" },
+  { id: "e2", title: "Tech Meetup", date: "Friday, 10AM", attendees: 8, type: "Professional" },
+  { id: "e3", title: "Wine Tasting", date: "Saturday, 8PM", attendees: 22, type: "Gastronomy" },
 ];
 
 export default function CommunityPage() {
   const [posts] = useState(MOCK_POSTS);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
   return (
-    <div className="min-h-screen bg-background pb-32 pt-12 px-6 lg:max-w-2xl lg:mx-auto">
+    <div className="min-h-screen bg-background pb-32 pt-12 px-6 lg:max-w-2xl lg:mx-auto relative">
+      {/* Event Booking Modal Simulation */}
+      {selectedEvent && (
+        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-primary/20 backdrop-blur-md"
+            onClick={() => setSelectedEvent(null)}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-500">
+             <div className="w-12 h-1 bg-primary/10 rounded-full mx-auto mb-8 sm:hidden" />
+             <div className="flex justify-between items-start mb-6">
+                <div>
+                   <span className="text-[10px] font-black uppercase tracking-widest text-accent mb-1 block">
+                      Booking Event
+                   </span>
+                   <h2 className="text-3xl font-light text-primary">{selectedEvent.title}</h2>
+                </div>
+                <div className="p-3 bg-primary/5 rounded-2xl text-primary">
+                   <Calendar className="w-6 h-6" />
+                </div>
+             </div>
+             
+             <div className="space-y-6 mb-10">
+                <div className="flex gap-4">
+                   <div className="flex-1 p-4 bg-slate-50 rounded-2xl border border-primary/5">
+                      <p className="text-[9px] font-bold text-primary/30 uppercase tracking-widest mb-1">Date</p>
+                      <p className="text-sm font-bold">{selectedEvent.date}</p>
+                   </div>
+                   <div className="flex-1 p-4 bg-slate-50 rounded-2xl border border-primary/5">
+                      <p className="text-[9px] font-bold text-primary/30 uppercase tracking-widest mb-1">Going</p>
+                      <p className="text-sm font-bold">{selectedEvent.attendees} Residents</p>
+                   </div>
+                </div>
+                <p className="text-sm text-primary/60 leading-relaxed italic">
+                   "Join us for an evening of connection and high-end gastronomy. Every moment is designed to be invisible and profound."
+                </p>
+             </div>
+
+             <button 
+              onClick={() => setSelectedEvent(null)}
+              className="w-full py-5 bg-primary text-white rounded-2xl font-bold shadow-xl shadow-primary/20 active:scale-95 transition-all"
+             >
+                Confirm Attendance
+             </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="mb-8 flex justify-between items-end">
         <div>
@@ -87,7 +136,11 @@ export default function CommunityPage() {
            </div>
            <div className="flex gap-4 overflow-x-auto no-scrollbar">
               {UPCOMING_EVENTS.map(event => (
-                <div key={event.id} className="luxury-card p-4 min-w-[200px] space-y-3">
+                <div 
+                  key={event.id} 
+                  onClick={() => setSelectedEvent(event)}
+                  className="luxury-card p-4 min-w-[200px] space-y-3 cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
                    <div className="flex justify-between items-start">
                       <div className="p-2 bg-primary/5 rounded-xl text-primary">
                          <Calendar className="w-4 h-4" />
@@ -159,4 +212,5 @@ export default function CommunityPage() {
     </div>
   );
 }
+
 

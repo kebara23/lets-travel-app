@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 import { BrandingProvider } from "@/components/shared/branding-provider";
+import { DemoRoleSwitcher } from "@/components/shared/demo-role-switcher";
 
 export default function RootLayout({
   children,
@@ -24,6 +25,7 @@ export default function RootLayout({
         "min-h-screen bg-background text-foreground selection:bg-accent/30"
       )}>
         <BrandingProvider>
+          <DemoRoleSwitcher />
           <main className="max-w-[1440px] mx-auto">
             {children}
           </main>
