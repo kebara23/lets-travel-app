@@ -1,68 +1,85 @@
 "use client";
 
-import React from "react";
-import { Gift, Star, Coffee, Zap, ChevronRight, Heart } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Star, Zap, Coffee, Wind, Sparkles, ChevronRight } from "lucide-react";
 import { TribeNavigation } from "@/components/shared/tribe-navigation";
 import { cn } from "@/lib/utils";
 
-const PERKS = [
-  { id: "p1", title: "Sunrise Coffee", cost: "500 pts", description: "Specialty blend at the main hub.", icon: Coffee, color: "text-amber-600", bg: "bg-amber-50" },
-  { id: "p2", title: "Yoga Session", cost: "1200 pts", description: "Private 1-on-1 session with a master.", icon: Zap, color: "text-blue-600", bg: "bg-blue-50" },
-  { id: "p3", title: "Community Dinner", cost: "2500 pts", description: "Join the elders for a sacred feast.", icon: Heart, color: "text-red-600", bg: "bg-red-50" },
+const ENERGY_PERKS = [
+  { id: 1, title: "Morning Flow Ceremony", desc: "Private Yoga & Sound Healing session.", cost: "10 Energy", icon: Wind },
+  { id: 2, title: "Cafe Cora Alchemy", desc: "Specialty coffee or ceremonial cacao of choice.", cost: "3 Energy", icon: Coffee },
+  { id: 3, title: "Sanctuary Spa Flow", desc: "60-minute therapeutic jungle massage.", cost: "25 Energy", icon: Sparkles },
+  { id: 4, title: "Private Temazcal", desc: "Ancestral steam ritual for rebirth.", cost: "15 Energy", icon: Zap },
 ];
 
 export default function TribePerksPage() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return (
-    <div className="min-h-screen pb-32 pt-8 px-6">
-      <header className="mb-8 space-y-2">
-        <h1 className="text-3xl font-light text-primary">Your Rewards</h1>
-        <p className="text-primary/40">Gratitude from the community for your energy.</p>
+    <div className="min-h-screen bg-awake-bone pb-40">
+      {/* Exchange Header */}
+      <header className="px-8 pt-24 pb-16 space-y-8 animate-in text-center max-w-4xl mx-auto">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-20 h-20 rounded-full bg-white/40 backdrop-blur-md border border-stone-200/50 flex items-center justify-center text-awake-moss shadow-awake-soft">
+            <Star className="w-8 h-8 text-awake-gold" />
+          </div>
+          <div className="space-y-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.5em] text-awake-moss/30">The Alchemical Exchange</p>
+            <h1 className="text-6xl font-serif text-awake-moss italic leading-tight tracking-tight">Energy Tokens</h1>
+          </div>
+          <p className="text-xl font-serif italic text-awake-moss/40 max-w-xl leading-relaxed">
+            Every mission completed returns energy to you. Exchange your devotion for sanctuary experiences.
+          </p>
+        </div>
+
+        {/* Energy Balance Card */}
+        <div className="awake-card p-10 max-w-sm mx-auto bg-white/60 backdrop-blur-sm border-stone-200/50 mt-12 flex flex-col items-center gap-4">
+           <span className="text-[10px] font-black uppercase tracking-widest text-awake-moss/30">Your Current Resonance</span>
+           <div className="flex items-center gap-4">
+              <Zap className="w-8 h-8 text-awake-gold" />
+              <span className="text-5xl font-serif text-awake-moss">12</span>
+           </div>
+           <span className="text-[10px] font-black uppercase tracking-widest text-awake-gold">Energy Credits</span>
+        </div>
       </header>
 
-      {/* Points Balance */}
-      <div className="luxury-card p-8 bg-primary text-white mb-10 relative overflow-hidden">
-         <div className="relative z-10">
-            <p className="text-xs uppercase tracking-widest text-white/60 mb-1">Current Balance</p>
-            <h2 className="text-5xl font-bold mb-4">2,450 <span className="text-xl font-light opacity-60 text-accent">pts</span></h2>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-bold uppercase tracking-tighter">
-               <Star className="w-3 h-3 fill-accent text-accent" /> Elite Contributor
-            </div>
-         </div>
-         <Gift className="absolute -right-10 -bottom-10 w-48 h-48 text-white/5 -rotate-12" />
-      </div>
-
-      {/* Perks List */}
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/30 ml-2 mb-4">Available Perks</h3>
-        {PERKS.map((perk) => {
-          const Icon = perk.icon;
-          return (
-            <button
-              key={perk.id}
-              className="w-full text-left p-5 luxury-card flex items-center justify-between group active:scale-[0.98] transition-all"
-            >
-              <div className="flex items-center gap-4">
-                <div className={cn("p-3 rounded-2xl", perk.bg, perk.color)}>
-                  <Icon className="w-6 h-6" />
+      {/* Perks Grid */}
+      <main className="px-8 max-w-6xl mx-auto space-y-10 animate-in">
+        <h2 className="text-xs font-black uppercase tracking-[0.4em] text-awake-moss/20 text-center">Available Alchemy</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {ENERGY_PERKS.map((perk) => {
+            const Icon = perk.icon;
+            return (
+              <button 
+                key={perk.id} 
+                className="awake-card p-10 text-left bg-white/40 border-stone-200/30 hover:bg-white hover:shadow-awake-floating transition-all duration-700 group flex justify-between items-center"
+              >
+                <div className="flex gap-8 items-center">
+                  <div className="w-16 h-16 rounded-3xl bg-awake-bone flex items-center justify-center text-awake-moss/30 group-hover:text-awake-moss group-hover:bg-awake-gold/10 transition-all duration-700">
+                    <Icon className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-serif text-awake-moss italic">{perk.title}</h3>
+                    <p className="text-sm font-serif italic text-awake-moss/40">"{perk.desc}"</p>
+                    <div className="pt-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-awake-gold px-3 py-1 bg-awake-gold/5 rounded-full">{perk.cost}</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-primary">{perk.title}</h4>
-                  <p className="text-xs text-primary/40 leading-tight mt-0.5">{perk.description}</p>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                 <span className="text-sm font-black text-accent">{perk.cost}</span>
-                 <ChevronRight className="w-4 h-4 text-primary/20 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                <ChevronRight className="w-6 h-6 text-awake-moss/10 group-hover:text-awake-moss group-hover:translate-x-2 transition-all duration-700" />
+              </button>
+            );
+          })}
+        </div>
+      </main>
 
       <TribeNavigation />
     </div>
   );
 }
-
-
-

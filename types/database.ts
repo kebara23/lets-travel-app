@@ -7,17 +7,14 @@ export type UserRole =
   | 'admin_guardian';
 
 export interface BrandingConfig {
-  primary_color: string;
-  accent_color: string;
-  bg_color: string;
-  logo_url: string | null;
-  font_family: string;
+  primaryColor: string;
+  accentColor: string;
 }
 
 export interface Organization {
   id: string;
   name: string;
-  branding_config: BrandingConfig;
+  branding_config: any;
   created_at: string;
 }
 
@@ -29,6 +26,7 @@ export interface UserProfile {
   full_name: string | null;
   avatar_url: string | null;
   current_status: 'active' | 'checked_out';
+  is_event_leader: boolean; // Dynamic Permission
   created_at: string;
 }
 
@@ -36,37 +34,22 @@ export interface Space {
   id: string;
   organization_id: string;
   name: string;
-  type: 'room' | 'common';
-  status: 'clean' | 'dirty' | 'maintenance';
+  type: string;
+  status: 'clean' | 'dirty' | 'maintenance' | 'cleaning' | 'ready';
   assigned_staff_id: string | null;
+  features: string[];
   created_at: string;
-}
-
-export interface ItineraryItem {
-  id: string;
-  user_id: string;
-  title: string;
-  type: 'activity' | 'gastronomy' | 'wellness';
-  start_time: string | null;
-  is_completed: boolean;
-  created_at: string;
-}
-
-export interface Mission {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string | null;
-  status: 'pending' | 'done';
-  date: string;
 }
 
 export interface Ticket {
   id: string;
   organization_id: string;
+  space_id: string;
   creator_id: string;
   assigned_to: string | null;
   type: 'maintenance' | 'service';
+  title: string;
+  description: string;
   status: 'open' | 'in_progress' | 'resolved';
   priority: 'low' | 'medium' | 'high';
   image_url: string | null;
@@ -77,53 +60,7 @@ export interface SOSAlert {
   id: string;
   user_id: string;
   organization_id: string;
-  lat: number;
-  lng: number;
+  location: string;
   status: 'active' | 'resolved';
   created_at: string;
 }
-
-export interface Database {
-  public: {
-    Tables: {
-      organizations: {
-        Row: Organization;
-        Insert: Omit<Organization, 'id' | 'created_at'>;
-        Update: Partial<Omit<Organization, 'id' | 'created_at'>>;
-      };
-      users: {
-        Row: UserProfile;
-        Insert: Omit<UserProfile, 'created_at'>;
-        Update: Partial<Omit<UserProfile, 'created_at'>>;
-      };
-      spaces: {
-        Row: Space;
-        Insert: Omit<Space, 'id' | 'created_at'>;
-        Update: Partial<Omit<Space, 'id' | 'created_at'>>;
-      };
-      itinerary_items: {
-        Row: ItineraryItem;
-        Insert: Omit<ItineraryItem, 'id' | 'created_at'>;
-        Update: Partial<Omit<ItineraryItem, 'id' | 'created_at'>>;
-      };
-      missions: {
-        Row: Mission;
-        Insert: Omit<Mission, 'id'>;
-        Update: Partial<Omit<Mission, 'id'>>;
-      };
-      tickets: {
-        Row: Ticket;
-        Insert: Omit<Ticket, 'id' | 'created_at'>;
-        Update: Partial<Omit<Ticket, 'id' | 'created_at'>>;
-      };
-      sos_alerts: {
-        Row: SOSAlert;
-        Insert: Omit<SOSAlert, 'id' | 'created_at'>;
-        Update: Partial<Omit<SOSAlert, 'id' | 'created_at'>>;
-      };
-    };
-  };
-}
-
-
-

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { LogIn, Sparkles, ShieldCheck } from "lucide-react";
+import { LogIn, Sparkles, ShieldCheck, Compass } from "lucide-react";
 import { useUserStore, DUMMY_USER } from "@/store/use-user-store";
 import { useRouter } from "next/navigation";
 
@@ -15,7 +15,6 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     
-    // Simulate login logic
     setTimeout(() => {
         setUser(DUMMY_USER);
         setLoading(false);
@@ -29,91 +28,92 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-6 py-12 bg-background">
-      <div className="w-full max-w-md space-y-8 text-center">
-        {/* Brand Logo / Header */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="p-4 rounded-full bg-white shadow-xl">
-             <Sparkles className="w-10 h-10 text-accent" />
+    <div className="flex flex-col items-center justify-center min-h-screen px-6 py-12 bg-awake-paper">
+      <div className="awake-gradient-bar fixed top-0 left-0 right-0" />
+      
+      <div className="w-full max-w-md space-y-12 text-center animate-in">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-16 h-16 bg-awake-violet rounded-full flex items-center justify-center text-white shadow-2xl">
+             <Sparkles className="w-8 h-8" />
           </div>
-          <h1 className="text-4xl font-light tracking-tight text-primary font-geist">
-            AWAKE OS
-          </h1>
-          <p className="text-primary/60 font-light">
-            Welcome back. Experience invisible technology.
-          </p>
+          <div className="space-y-2">
+            <h1 className="text-5xl font-serif text-awake-heading italic tracking-tight">
+              AWAKE OS
+            </h1>
+            <p className="text-awake-body/60 font-serif italic text-lg">
+              Welcome back to the sanctuary.
+            </p>
+          </div>
         </div>
 
-        {/* Luxury Login Card */}
-        <div className="p-8 luxury-card">
-          <form onSubmit={handleLogin} className="space-y-6 text-left">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-primary/70 ml-1">Email Address</label>
+        <div className="p-10 awake-card border-none bg-white">
+          <form onSubmit={handleLogin} className="space-y-8 text-left">
+            <div className="space-y-3">
+              <label className="text-[10px] font-sans font-black uppercase tracking-[0.2em] text-awake-violet/40 ml-1">Email Address</label>
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="hello@awake.com"
-                className="w-full px-4 py-3 rounded-xl border border-primary/10 bg-white/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                placeholder="soul@awake.cr"
+                className="w-full bg-awake-paper/50 border-b border-awake-violet/10 py-3 px-4 focus:border-awake-sunset outline-none transition-all font-sans text-sm"
               />
             </div>
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-primary/70 ml-1">Password</label>
+            <div className="space-y-3">
+              <label className="text-[10px] font-sans font-black uppercase tracking-[0.2em] text-awake-violet/40 ml-1">Secret Key</label>
               <input 
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-3 rounded-xl border border-primary/10 bg-white/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                className="w-full bg-awake-paper/50 border-b border-awake-violet/10 py-3 px-4 focus:border-awake-sunset outline-none transition-all font-sans text-sm"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-4 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-300 shadow-lg shadow-primary/20"
+              className="awake-btn w-full py-4 flex justify-center items-center gap-3"
             >
               {isLoading ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <span className="flex items-center gap-2">
-                  Sign In <LogIn className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </span>
+                <>
+                  Enter Sanctuary <LogIn className="w-4 h-4" />
+                </>
               )}
             </button>
           </form>
 
-          {/* Quick Access Divider */}
-          <div className="relative my-8">
+          <div className="relative my-10">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-primary/5"></div>
+              <div className="w-full border-t border-awake-violet/5"></div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase tracking-widest text-primary/20 font-bold bg-[#F5EFE6] px-2">
-              Simulation Mode
+            <div className="relative flex justify-center text-[10px] font-sans font-black uppercase tracking-[0.3em] text-awake-violet/20 bg-white px-4">
+              Quick Perspective
             </div>
           </div>
 
-          {/* Direct Access Buttons */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
              <button 
               onClick={() => quickEnter('admin_guardian', '/guardian/dashboard')}
-              className="p-3 rounded-xl border border-primary/5 bg-white/30 hover:bg-white text-[10px] font-bold uppercase tracking-tight text-primary/60 transition-all flex flex-col items-center gap-2"
+              className="p-4 rounded-sm border border-awake-violet/5 hover:bg-awake-paper transition-all flex flex-col items-center gap-3 group"
              >
-                <ShieldCheck className="w-4 h-4 text-blue-500" /> Manager
+                <ShieldCheck className="w-5 h-5 text-awake-violet/40 group-hover:text-awake-violet transition-colors" />
+                <span className="text-[10px] font-sans font-black uppercase tracking-widest text-awake-violet/40 group-hover:text-awake-violet">Guardian</span>
              </button>
              <button 
               onClick={() => quickEnter('guest_short', '/short-term/dashboard')}
-              className="p-3 rounded-xl border border-primary/5 bg-white/30 hover:bg-white text-[10px] font-bold uppercase tracking-tight text-primary/60 transition-all flex flex-col items-center gap-2"
+              className="p-4 rounded-sm border border-awake-violet/5 hover:bg-awake-paper transition-all flex flex-col items-center gap-3 group"
              >
-                <Sparkles className="w-4 h-4 text-accent" /> Guest
+                <Compass className="w-5 h-5 text-awake-violet/40 group-hover:text-awake-sunset transition-colors" />
+                <span className="text-[10px] font-sans font-black uppercase tracking-widest text-awake-violet/40 group-hover:text-awake-sunset">Explorer</span>
              </button>
           </div>
         </div>
 
-        {/* Footer Info */}
-        <p className="text-xs text-primary/40 pt-4">
-          Powered by AWAKE. No database required for this demo.
+        <p className="text-[10px] font-sans font-bold uppercase tracking-[0.4em] text-awake-violet/20">
+          Transformational Experiences • Uvita, Costa Rica
         </p>
       </div>
     </div>

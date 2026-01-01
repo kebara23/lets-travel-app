@@ -1,144 +1,141 @@
 "use client";
 
-import React, { useState } from "react";
-import { Check, Clock, AlertTriangle, Search, Filter, Settings } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, Filter, Sparkles, Wind, Droplets, Zap, Waves, Settings, Clock, Check } from "lucide-react";
 import { StaffNavigation } from "@/components/shared/staff-navigation";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
+import { CleaningChecklist } from "@/components/harmony/CleaningChecklist";
 import { useUserStore } from "@/store/use-user-store";
-
-type RoomStatus = "dirty" | "cleaning" | "clean" | "maintenance";
 
 export default function HarmonyRoomsPage() {
   const { mockSpaces, updateMockSpace } = useUserStore();
-  const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  const updateRoomStatus = async (roomId: string, currentStatus: RoomStatus) => {
-    const statusCycle: Record<RoomStatus, RoomStatus> = {
-      "dirty": "cleaning",
-      "cleaning": "clean",
-      "clean": "dirty",
-      "maintenance": "dirty"
-    };
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-    const nextStatus = statusCycle[currentStatus];
-    setIsUpdating(roomId);
+  if (!mounted) return null;
 
-    try {
-      // This will emit a mock event in lib/supabase.ts
-      await supabase
-        .from('spaces')
-        .update({ status: nextStatus })
-        .eq('id', roomId);
+  const selectedRoom = mockSpaces.find(s => s.id === selectedRoomId);
 
-      // Update local simulation store
-      updateMockSpace(roomId, nextStatus);
-      
-    } catch (err) {
-      console.error("Error updating room:", err);
-    } finally {
-      setIsUpdating(null);
+  const handleComplete = () => {
+    if (selectedRoomId) {
+      updateMockSpace(selectedRoomId, 'clean');
+      setSelectedRoomId(null);
     }
   };
 
-  const getStatusColor = (status: RoomStatus) => {
+  const getStatusStyle = (status: string) => {
     switch (status) {
-      case "dirty": return "bg-red-500 text-white";
-      case "cleaning": return "bg-amber-400 text-white";
-      case "clean": return "bg-emerald-500 text-white";
-      case "maintenance": return "bg-slate-700 text-white";
-      default: return "bg-slate-200";
-    }
-  };
-
-  const getStatusIcon = (status: RoomStatus) => {
-    switch (status) {
-      case "dirty": return <AlertTriangle className="w-6 h-6" />;
-      case "cleaning": return <Clock className="w-6 h-6 animate-pulse" />;
-      case "clean": return <Check className="w-6 h-6" />;
-      case "maintenance": return <Settings className="w-6 h-6" />;
-      default: return null;
+      case "dirty": return "bg-awake-terracotta";
+      case "cleaning": return "bg-awake-gold";
+      case "clean": return "bg-awake-sage";
+      case "maintenance": return "bg-awake-lavender";
+      default: return "bg-stone-200";
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      {/* High-Contrast Header */}
-      <header className="bg-primary text-white p-6 pt-12 shadow-lg">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold tracking-tight">HARMONY</h1>
-          <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
-            Shift: Morning
+    <div className="min-h-screen bg-awake-bone pb-32">
+      <header className="px-8 pt-20 pb-12 space-y-8 animate-in">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+          <div className="space-y-2">
+            <h1 className="text-4xl lg:text-5xl font-serif text-awake-moss italic leading-tight">Harmony Flow</h1>
+            <p className="text-[11px] font-sans font-black uppercase tracking-[0.4em] text-awake-moss/30">Sanctuary Operations</p>
+          </div>
+          <div className="w-16 h-16 rounded-full bg-white/40 backdrop-blur-md border border-stone-200/50 flex items-center justify-center text-awake-moss shadow-awake-soft">
+            <Sparkles className="w-6 h-6 opacity-40" />
           </div>
         </div>
-        
-        {/* Large Search Bar for Utility */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-5 h-5" />
+
+        <div className="relative group">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-awake-moss/20 group-focus-within:text-awake-sage transition-colors" />
           <input 
             type="text"
-            placeholder="Search rooms..."
-            className="w-full bg-white/10 border-none rounded-2xl py-4 pl-12 text-white placeholder:text-white/40 focus:ring-2 focus:ring-accent"
+            placeholder="Listen to the sanctuary..."
+            className="w-full bg-white/40 backdrop-blur-sm border border-stone-200/50 rounded-full py-5 pl-14 pr-6 text-sm font-sans text-awake-moss placeholder:text-awake-moss/20 focus:outline-none focus:ring-4 focus:ring-awake-sage/5 transition-all"
           />
         </div>
       </header>
 
-      {/* Stats Quick-View */}
-      <div className="flex p-4 gap-2 overflow-x-auto no-scrollbar">
-         {[
-           { label: "Dirty", count: mockSpaces.filter(s => s.status === 'dirty').length, color: "bg-red-500" },
-           { label: "Cleaning", count: mockSpaces.filter(s => s.status === 'cleaning').length, color: "bg-amber-400" },
-           { label: "Clean", count: mockSpaces.filter(s => s.status === 'clean').length, color: "bg-emerald-500" },
-         ].map(stat => (
-           <div key={stat.label} className="bg-white rounded-2xl p-4 flex-1 shadow-sm border border-slate-100 min-w-[100px]">
-              <div className={cn("w-2 h-2 rounded-full mb-2", stat.color)} />
-              <div className="text-xl font-bold text-primary">{stat.count}</div>
-              <div className="text-[10px] uppercase font-bold text-primary/40">{stat.label}</div>
-           </div>
-         ))}
+      <div className="px-8 flex gap-8 mb-12 overflow-x-auto no-scrollbar">
+        {[
+          { label: "Restore", count: mockSpaces.filter(r => r.status === 'dirty').length, color: "bg-awake-terracotta" },
+          { label: "Flowing", count: mockSpaces.filter(r => r.status === 'cleaning').length, color: "bg-awake-gold" },
+          { label: "Awake", count: mockSpaces.filter(r => r.status === 'clean').length, color: "bg-awake-sage" },
+        ].map((stat) => (
+          <div key={stat.label} className="flex flex-col gap-1 min-w-[80px]">
+            <div className="flex items-center gap-2">
+              <div className={cn("w-2 h-2 rounded-full", stat.color)} />
+              <span className="text-2xl font-serif italic text-awake-moss">{stat.count}</span>
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-awake-moss/20">{stat.label}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Traffic Light Grid */}
-      <div className="px-4 grid grid-cols-2 gap-4">
+      <main className="px-6 lg:px-8 grid grid-cols-2 md:grid-cols-2 gap-6 lg:gap-8 animate-in">
         {mockSpaces.map((room) => (
           <button
             key={room.id}
-            onClick={() => updateRoomStatus(room.id, room.status as RoomStatus)}
-            disabled={isUpdating === room.id}
-            className={cn(
-              "bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center space-y-3 active:scale-95 transition-all overflow-hidden relative",
-              isUpdating === room.id && "opacity-50 scale-95"
-            )}
+            onClick={() => setSelectedRoomId(room.id)}
+            className="group relative bg-white/60 backdrop-blur-sm border border-stone-200/50 rounded-4xl p-6 lg:p-10 text-left transition-all duration-700 hover:bg-white hover:shadow-awake-floating active:scale-[0.98] overflow-hidden"
           >
-            {/* Status Ribbon */}
             <div className={cn(
-              "absolute top-0 right-0 left-0 h-2",
-              getStatusColor(room.status as RoomStatus)
+              "absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-700",
+              getStatusStyle(room.status)
             )} />
 
-            <div className={cn(
-                "w-16 h-16 rounded-full flex items-center justify-center shadow-lg",
-                getStatusColor(room.status as RoomStatus)
-            )}>
-              {getStatusIcon(room.status as RoomStatus)}
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6 mb-6 lg:mb-10">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-awake-lavender opacity-60">{room.type}</span>
+                <h3 className="text-xl lg:text-3xl font-serif text-awake-moss leading-tight">{room.name}</h3>
+              </div>
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-700 group-hover:scale-110 shadow-lg",
+                getStatusStyle(room.status),
+                "text-white"
+              )}>
+                {room.status === 'dirty' && <Clock className="w-5 h-5" />}
+                {room.status === 'cleaning' && <Wind className="w-5 h-5 animate-pulse" />}
+                {room.status === 'clean' && <Check className="w-5 h-5" />}
+                {room.status === 'maintenance' && <Settings className="w-5 h-5" />}
+              </div>
             </div>
 
-            <div>
-              <h3 className="text-xl font-bold text-primary">{room.name}</h3>
-              <p className="text-xs font-medium text-primary/40 uppercase tracking-wide truncate max-w-[120px]">
-                {room.type === 'room' ? 'Cabin Guest' : 'Common Area'}
-              </p>
+            <div className="flex flex-wrap gap-2">
+              {room.features?.map((f) => (
+                <span key={f} className="px-3 py-1.5 rounded-full bg-awake-bone border border-stone-200/30 text-[9px] font-bold text-awake-moss/40 uppercase tracking-widest transition-all group-hover:bg-white group-hover:text-awake-moss/60">
+                  {f}
+                </span>
+              ))}
             </div>
 
-            <div className={cn(
-              "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-              room.status === "clean" ? "text-emerald-600 bg-emerald-50" : "text-primary/60 bg-slate-50"
-            )}>
-              {room.status}
+            <div className="mt-8 pt-8 border-t border-stone-100/50 flex justify-between items-center">
+              <span className={cn(
+                "text-[10px] font-black uppercase tracking-[0.2em]",
+                room.status === 'clean' ? "text-awake-sage" : "text-awake-moss/20"
+              )}>
+                {room.status}
+              </span>
+              <span className="text-[10px] font-bold text-awake-moss/10 group-hover:text-awake-moss/30 transition-colors uppercase tracking-widest italic">
+                Ritual Ready
+              </span>
             </div>
           </button>
         ))}
-      </div>
+      </main>
+
+      {selectedRoom && (
+        <CleaningChecklist 
+          roomName={selectedRoom.name}
+          roomType={selectedRoom}
+          onClose={() => setSelectedRoomId(null)}
+          onComplete={handleComplete}
+        />
+      )}
 
       <StaffNavigation />
     </div>

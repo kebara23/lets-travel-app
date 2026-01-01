@@ -3,49 +3,62 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 40 33% 93%; /* Cream #F5EFE6 */
-    --foreground: 154 44% 19%; /* Forest Green #1B4734 */
-    
-    --primary: 154 44% 19%;
-    --primary-foreground: 40 33% 93%;
-    
-    --accent: 41 54% 55%; /* Gold #C9A24E */
-    --accent-foreground: 154 44% 19%;
+  body {
+    @apply bg-awake-bone text-awake-moss font-sans selection:bg-awake-sage/20 antialiased;
+    /* Human-centric organic texture overlay */
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    background-blend-mode: overlay;
+  }
 
-    --radius: 0.75rem; /* rounded-xl */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif text-awake-moss;
   }
 }
 
-body {
-  background-color: #F5EFE6;
-  color: #1B4734;
-}
-
-/* Dopamine Explosion Animation */
-@keyframes explosion {
-  0% {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
+@layer components {
+  .awake-btn {
+    @apply bg-awake-moss text-awake-bone px-8 py-4 rounded-full font-sans font-black uppercase tracking-[0.2em] text-[10px] transition-all duration-700 hover:shadow-awake-floating active:scale-95 hover:bg-awake-moss/90;
   }
-  100% {
-    transform: translate(
-      calc(cos(var(--angle)) * var(--velocity) * 100px),
-      calc(sin(var(--angle)) * var(--velocity) * 100px)
-    ) scale(0);
-    opacity: 0;
+
+  .awake-card {
+    @apply bg-white/60 backdrop-blur-md border border-stone-200/50 rounded-4xl shadow-awake-soft transition-all duration-700 hover:shadow-awake-floating;
+  }
+
+  .awake-gradient-bar {
+    @apply h-1.5 w-full bg-gradient-to-r from-awake-sage via-awake-gold to-awake-terracotta;
   }
 }
 
-.animate-explosion {
-  animation: explosion 0.8s ease-out forwards;
+/* Mycelium Fluidity Animations */
+@keyframes mycelium-float {
+  0% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-10px) scale(1.01); }
+  100% { transform: translateY(0px) scale(1); }
 }
 
-/* Luxury Card Shadow */
-.luxury-card {
-  @apply bg-white/50 backdrop-blur-sm border border-white/20 rounded-2xl shadow-sm transition-all hover:shadow-md;
+.animate-mycelium {
+  animation: mycelium-float 10s ease-in-out infinite;
 }
 
+/* Smooth Fade In */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
+.animate-in {
+  animation: fadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
 
-
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #4A5D4410;
+  border-radius: 10px;
+}

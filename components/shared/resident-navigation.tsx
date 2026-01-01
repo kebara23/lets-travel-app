@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils";
 
 const residentLinks = [
   { label: "Feed", href: "/long-term/community", icon: Home },
-  { label: "Connect", href: "/long-term/directory", icon: Users },
+  { label: "Connect", href: "/long-term/community", icon: Users },
   { label: "Chat", href: "/long-term/chat", icon: MessageSquare },
-  { label: "Events", href: "/long-term/events", icon: Calendar },
-  { label: "Me", href: "/long-term/profile", icon: Search },
+  { label: "Events", href: "/long-term/community", icon: Calendar },
+  { label: "Me", href: "/long-term/community", icon: Search },
 ];
 
 export function ResidentNavigation() {
@@ -25,7 +25,7 @@ export function ResidentNavigation() {
         
         return (
           <Link 
-            key={link.href} 
+            key={link.label + link.href} 
             href={link.href}
             className={cn(
               "flex flex-col items-center gap-1 transition-all duration-300",
@@ -40,5 +40,3 @@ export function ResidentNavigation() {
     </nav>
   );
 }
-
-

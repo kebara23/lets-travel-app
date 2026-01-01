@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Cormorant_Garamond, Outfit } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "AWAKE OS",
-  description: "High-End Hospitality Platform",
-};
-
 import { BrandingProvider } from "@/components/shared/branding-provider";
 import { DemoRoleSwitcher } from "@/components/shared/demo-role-switcher";
+
+const cormorant = Cormorant_Garamond({ 
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-cormorant",
+  display: 'swap',
+});
+
+const outfit = Outfit({ 
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: 'swap',
+});
+
+export const metadata: Metadata = {
+  title: "AWAKE OS | Eco-Luxury Sanctuary",
+  description: "Operating System for Invisible Hospitality",
+};
 
 export default function RootLayout({
   children,
@@ -19,19 +29,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="antialiased">
-      <body className={cn(
-        inter.className,
-        "min-h-screen bg-background text-foreground selection:bg-accent/30"
-      )}>
+    <html lang="en" className={cn(cormorant.variable, outfit.variable, "antialiased")}>
+      <body className="min-h-screen bg-awake-bone font-sans text-awake-moss selection:bg-awake-sage/20">
         <BrandingProvider>
           <DemoRoleSwitcher />
-          <main className="max-w-[1440px] mx-auto">
-            {children}
-          </main>
+          {children}
         </BrandingProvider>
       </body>
     </html>
   );
 }
-
